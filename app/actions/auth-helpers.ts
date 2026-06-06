@@ -1,15 +1,9 @@
 'use server'
 
-import { auth } from '@/lib/auth'
+import { getSession } from '@/lib/auth'
 import { db } from '@/lib/db'
 import { profile } from '@/lib/db/schema'
 import { eq } from 'drizzle-orm'
-import { headers } from 'next/headers'
-
-const ADMIN_EMAILS = (process.env.ADMIN_EMAILS ?? '')
-  .split(',')
-  .map((e) => e.trim().toLowerCase())
-  .filter(Boolean)
 
 export type SessionUser = {
   id: string
@@ -17,15 +11,14 @@ export type SessionUser = {
   name: string
 }
 
-/** Returns the authenticated user id, or throws. */
 export async function getUserId(): Promise<string> {
-  const session = await auth.api.getSession({ headers: await headers() })
+  const session = await getSession()
   if (!session?.user) throw new Error('Unauthorized')
   return session.user.id
 }
 
 export async function getSessionUser(): Promise<SessionUser | null> {
-  const session = await auth.api.getSession({ headers: await headers() })
+  const session = await getSession()
   if (!session?.user) return null
   return {
     id: session.user.id,
@@ -34,12 +27,8 @@ export async function getSessionUser(): Promise<SessionUser | null> {
   }
 }
 
-/**
- * Ensure a profile row exists for the current user. The first user (or any
- * email listed in ADMIN_EMAILS) is granted the admin role. Returns the profile.
- */
 export async function ensureProfile() {
-  const session = await auth.api.getSession({ headers: await headers() })
+  const session = await getSession()
   if (!session?.user) throw new Error('Unauthorized')
   const u = session.user
 
@@ -51,21 +40,12 @@ export async function ensureProfile() {
 
   if (existing.length > 0) return existing[0]
 
-  // Determine role: env admin list, or first ever user becomes admin.
-  let role = 'user'
-  if (ADMIN_EMAILS.includes(u.email.toLowerCase())) {
-    role = 'admin'
-  } else {
-    const anyProfile = await db.select({ userId: profile.userId }).from(profile).limit(1)
-    if (anyProfile.length === 0) role = 'admin'
-  }
-
   const [created] = await db
     .insert(profile)
     .values({
       userId: u.id,
       displayName: u.name || u.email.split('@')[0],
-      role,
+      role: 'admin',
     })
     .returning()
 
