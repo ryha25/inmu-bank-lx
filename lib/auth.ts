@@ -1,48 +1,27 @@
-import { betterAuth } from 'better-auth'
-import { drizzleAdapter } from '@better-auth/drizzle-adapter'
-import { db } from '@/lib/db'
-import { user, session, account, verification } from '@/lib/db/schema'
+import { cookies } from 'next/headers'
 
-export const auth = betterAuth({
-  database: drizzleAdapter(db, {
-    provider: 'pg',
-    schema: {
-      user,
-      session,
-      account,
-      verification,
+export const DEMO_SESSION_COOKIE = 'demo-session'
+export const DEMO_USER_ID = 'demo-user-1'
+export const DEMO_USER_EMAIL = 'demo@inmu.bank'
+export const DEMO_USER_NAME = 'Demo User'
+
+export type DemoSession = {
+  user: {
+    id: string
+    email: string
+    name: string
+  }
+} | null
+
+export async function getSession(): Promise<DemoSession> {
+  const cookieStore = await cookies()
+  const sessionId = cookieStore.get(DEMO_SESSION_COOKIE)?.value
+  if (!sessionId) return null
+  return {
+    user: {
+      id: DEMO_USER_ID,
+      email: DEMO_USER_EMAIL,
+      name: DEMO_USER_NAME,
     },
-  }),
-  baseURL:
-    process.env.BETTER_AUTH_URL ??
-    (process.env.VERCEL_PROJECT_PRODUCTION_URL
-      ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`
-      : process.env.VERCEL_URL
-        ? `https://${process.env.VERCEL_URL}`
-        : process.env.V0_RUNTIME_URL),
-  emailAndPassword: {
-    enabled: true,
-    autoSignIn: true,
-  },
-  trustedOrigins: [
-    ...(process.env.V0_RUNTIME_URL ? [process.env.V0_RUNTIME_URL] : []),
-    ...(process.env.VERCEL_URL ? [`https://${process.env.VERCEL_URL}`] : []),
-    ...(process.env.VERCEL_PROJECT_PRODUCTION_URL
-      ? [`https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`]
-      : []),
-  ],
-  session: {
-    expiresIn: 60 * 60 * 24 * 7, // 7 days
-    updateAge: 60 * 60 * 24, // 1 day
-  },
-  ...(process.env.NODE_ENV === 'development'
-    ? {
-        advanced: {
-          defaultCookieAttributes: {
-            sameSite: 'none' as const,
-            secure: true,
-          },
-        },
-      }
-    : {}),
-})
+  }
+}
