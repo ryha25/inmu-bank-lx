@@ -5,38 +5,23 @@ import { useI18n } from '@/lib/i18n/context'
 import type { TranslationKey } from '@/lib/i18n/dict'
 import { cn } from '@/lib/utils'
 import {
-  Award, Bell, Coins, Gift, History, LayoutDashboard,
-  LogOut, PiggyBank, Send, Shield, Star, Target,
-  Trophy, User as UserIcon, Users,
+  Bell, Coins, History, LayoutDashboard,
+  LogOut, Shield, Star, Trophy, User as UserIcon, Users,
 } from 'lucide-react'
 import { Link, useLocation } from 'wouter'
 
-type NavItem = { href: string; key: TranslationKey; icon: React.ElementType }
+type NavItem = { href: string; key: TranslationKey; icon: React.ElementType; adminOnly?: boolean }
 
-// ─── Bottom tab bar (mobile) — 5 items ───────────────────────────────────────
-const BOTTOM_NAV: NavItem[] = [
-  { href: '/',          key: 'nav_dashboard',  icon: LayoutDashboard },
-  { href: '/history',   key: 'nav_history',    icon: History },
-  { href: '/jars',      key: 'nav_jars',       icon: PiggyBank },
-  { href: '/community', key: 'nav_community',  icon: Users },
-  { href: '/profile',   key: 'nav_profile',    icon: UserIcon },
-]
-
-// ─── Desktop sidebar — full list ──────────────────────────────────────────────
-const SIDEBAR_NAV: NavItem[] = [
+const ALL_NAV: NavItem[] = [
   { href: '/',              key: 'nav_dashboard',     icon: LayoutDashboard },
   { href: '/balance',       key: 'nav_balance',       icon: Coins },
   { href: '/history',       key: 'nav_history',       icon: History },
-  { href: '/transfers',     key: 'nav_transfers',     icon: Send },
-  { href: '/jars',          key: 'nav_jars',          icon: PiggyBank },
-  { href: '/goals',         key: 'nav_goals',         icon: Target },
-  { href: '/rewards',       key: 'nav_rewards',       icon: Award },
-  { href: '/airdrops',      key: 'nav_airdrops',      icon: Gift },
-  { href: '/community',     key: 'nav_community',     icon: Users },
-  { href: '/ranking',       key: 'nav_ranking',       icon: Trophy },
   { href: '/points',        key: 'nav_points',        icon: Star },
+  { href: '/ranking',       key: 'nav_ranking',       icon: Trophy },
   { href: '/notifications', key: 'nav_notifications', icon: Bell },
+  { href: '/community',     key: 'nav_community',     icon: Users },
   { href: '/profile',       key: 'nav_profile',       icon: UserIcon },
+  { href: '/admin',         key: 'nav_admin',         icon: Shield, adminOnly: true },
 ]
 
 export function AppShell({
@@ -53,9 +38,7 @@ export function AppShell({
   const { t } = useI18n()
   const [location, navigate] = useLocation()
 
-  const sidebarItems: NavItem[] = isAdmin
-    ? [...SIDEBAR_NAV, { href: '/admin', key: 'nav_admin' as const, icon: Shield }]
-    : SIDEBAR_NAV
+  const visibleNav = ALL_NAV.filter((item) => !item.adminOnly || isAdmin)
 
   async function handleSignOut() {
     await signOut()
@@ -75,7 +58,7 @@ export function AppShell({
         </div>
         <nav className="flex-1 overflow-y-auto px-3 py-4">
           <ul className="flex flex-col gap-0.5">
-            {sidebarItems.map((item) => {
+            {visibleNav.map((item) => {
               const Icon = item.icon
               const active = isActive(item.href)
               return (
@@ -127,51 +110,39 @@ export function AppShell({
           </div>
           <div className="flex items-center gap-2">
             <LangToggle />
-            <Link
-              href="/notifications"
-              className="relative flex size-9 items-center justify-center rounded-full border border-border bg-card/60 lg:hidden"
-              aria-label={t('nav_notifications')}
-            >
-              <Bell className="size-[17px]" />
-              {unread > 0 && (
-                <span className="absolute -right-0.5 -top-0.5 flex size-4 items-center justify-center rounded-full bg-accent text-[9px] font-bold text-accent-foreground">
-                  {unread > 9 ? '9+' : unread}
-                </span>
-              )}
-            </Link>
           </div>
         </header>
 
         {/* Page content — bottom padding for tab bar */}
-        <main className="mx-auto w-full max-w-5xl px-4 pb-24 pt-5 lg:px-8 lg:pb-10">
+        <main className="mx-auto w-full max-w-5xl px-4 pb-28 pt-5 lg:px-8 lg:pb-10">
           {children}
         </main>
       </div>
 
-      {/* ── Mobile bottom tab bar (5 items) ── */}
-      <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-border bg-background/95 backdrop-blur-md lg:hidden">
-        <ul className="flex items-stretch">
-          {BOTTOM_NAV.map((item) => {
+      {/* ── Mobile scrollable bottom tab bar ── */}
+      <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-border bg-background/98 backdrop-blur-md lg:hidden">
+        <ul className="flex items-stretch overflow-x-auto scrollbar-none">
+          {visibleNav.map((item) => {
             const Icon = item.icon
             const active = isActive(item.href)
             return (
-              <li key={item.href} className="flex-1">
+              <li key={item.href} className="flex-shrink-0">
                 <Link
                   href={item.href}
                   className={cn(
-                    'flex min-h-[60px] flex-col items-center justify-center gap-1 text-[10px] font-medium transition-colors',
+                    'flex min-h-[60px] w-[72px] flex-col items-center justify-center gap-1 text-[9px] font-medium transition-colors',
                     active ? 'text-primary' : 'text-muted-foreground',
                   )}
                 >
                   <span className="relative">
-                    <Icon className="size-[22px]" />
+                    <Icon className="size-[20px]" />
                     {item.href === '/notifications' && unread > 0 && (
                       <span className="absolute -right-2 -top-1.5 flex size-3.5 items-center justify-center rounded-full bg-accent text-[8px] font-bold text-accent-foreground">
                         {unread > 9 ? '9' : unread}
                       </span>
                     )}
                   </span>
-                  <span>{t(item.key)}</span>
+                  <span className="leading-none text-center w-full truncate px-1">{t(item.key)}</span>
                 </Link>
               </li>
             )

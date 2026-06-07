@@ -185,6 +185,50 @@ router.post("/jars/:id/lock", requireAuth, async (req, res): Promise<void> => {
   }
 });
 
+router.post("/jars/:id/unlock", requireAuth, async (req, res): Promise<void> => {
+  const userId = req.userId!;
+  const jarId = Number(req.params.id);
+  try {
+    const jar = await db
+      .select()
+      .from(jarsTable)
+      .where(eq(jarsTable.id, jarId))
+      .then((r) => r[0]);
+    if (!jar || jar.userId !== userId) {
+      res.status(404).json({ error: "Jar not found" });
+      return;
+    }
+    if (jar.isLocked && jar.unlockDate && jar.unlockDate > new Date()) {
+      res.status(400).json({ error: "Lock period not yet expired" });
+      return;
+    }
+    const amount = Number(jar.balance);
+    await db
+      .update(jarsTable)
+      .set({ isLocked: false, unlockDate: null, balance: "0" })
+      .where(eq(jarsTable.id, jarId));
+    if (amount > 0) {
+      await db
+        .update(profileTable)
+        .set({
+          balance: sql`${profileTable.balance} + ${amount}`,
+          updatedAt: new Date(),
+        })
+        .where(eq(profileTable.userId, userId));
+      await db.insert(transactionsTable).values({
+        userId,
+        type: "deposit",
+        amount: String(amount),
+        category: "lock",
+        memo: "ロック解除",
+      });
+    }
+    res.json({ ok: true });
+  } catch {
+    res.status(500).json({ error: "Internal error" });
+  }
+});
+
 router.delete("/jars/:id", requireAuth, async (req, res): Promise<void> => {
   const userId = req.userId!;
   const jarId = Number(req.params.id);

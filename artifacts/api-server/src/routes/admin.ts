@@ -417,6 +417,110 @@ router.get(
   },
 );
 
+router.post("/admin/verify-code", requireAdmin, async (req, res): Promise<void> => {
+  const { code } = req.body as { code?: string };
+  const adminCode = process.env.ADMIN_CODE ?? "0000";
+  if (!code || code !== adminCode) {
+    res.status(403).json({ error: "Invalid admin code" });
+    return;
+  }
+  res.json({ ok: true });
+});
+
+router.post("/admin/grant-points", requireAdmin, async (req, res): Promise<void> => {
+  const adminId = req.userId!;
+  const { targetUserIds, amount, reason } = req.body as {
+    targetUserIds?: string[];
+    amount?: number;
+    reason?: string;
+  };
+  if (!targetUserIds?.length || !amount || amount <= 0) {
+    res.status(400).json({ error: "targetUserIds and amount required" });
+    return;
+  }
+  try {
+    for (const uid of targetUserIds) {
+      await db
+        .update(profileTable)
+        .set({
+          monthlyPoints: sql`${profileTable.monthlyPoints} + ${amount}`,
+          updatedAt: new Date(),
+        })
+        .where(eq(profileTable.userId, uid));
+      await notify(uid, "points", `${amount}ポイントが付与されました`, reason ?? `${amount} pts`);
+    }
+    await logAudit(adminId, "adminGrantPoints", undefined, { targetUserIds, amount, reason });
+    res.json({ ok: true });
+  } catch {
+    res.status(500).json({ error: "Internal error" });
+  }
+});
+
+router.post("/admin/send-notification", requireAdmin, async (req, res): Promise<void> => {
+  const adminId = req.userId!;
+  const { targetUserIds, title, message } = req.body as {
+    targetUserIds?: string[];
+    title?: string;
+    message?: string;
+  };
+  if (!targetUserIds?.length || !title?.trim()) {
+    res.status(400).json({ error: "targetUserIds and title required" });
+    return;
+  }
+  try {
+    for (const uid of targetUserIds) {
+      await notify(uid, "admin", title.trim(), message ?? "");
+    }
+    await logAudit(adminId, "adminSendNotification", undefined, { count: targetUserIds.length, title });
+    res.json({ ok: true });
+  } catch {
+    res.status(500).json({ error: "Internal error" });
+  }
+});
+
+router.post("/admin/deduct-balance", requireAdmin, async (req, res): Promise<void> => {
+  const adminId = req.userId!;
+  const { targetUserId, amount, reason } = req.body as {
+    targetUserId?: string;
+    amount?: number;
+    reason?: string;
+  };
+  if (!targetUserId || !amount || amount <= 0) {
+    res.status(400).json({ error: "targetUserId and amount required" });
+    return;
+  }
+  try {
+    const profile = await db
+      .select()
+      .from(profileTable)
+      .where(eq(profileTable.userId, targetUserId))
+      .then((r) => r[0]);
+    if (!profile || Number(profile.balance) < amount) {
+      res.status(400).json({ error: "Insufficient balance" });
+      return;
+    }
+    await db
+      .update(profileTable)
+      .set({
+        balance: sql`${profileTable.balance} - ${amount}`,
+        totalSent: sql`${profileTable.totalSent} + ${amount}`,
+        updatedAt: new Date(),
+      })
+      .where(eq(profileTable.userId, targetUserId));
+    await db.insert(transactionsTable).values({
+      userId: targetUserId,
+      type: "withdraw",
+      amount: String(amount),
+      memo: reason ?? "管理者による減算",
+    });
+    await notify(targetUserId, "balance", "残高が減算されました", reason ?? `${amount} INMU`);
+    await logAudit(adminId, "adminDeductBalance", targetUserId, { amount, reason });
+    res.json({ ok: true });
+  } catch {
+    res.status(500).json({ error: "Internal error" });
+  }
+});
+
 router.post("/admin/set-role", requireAdmin, async (req, res): Promise<void> => {
   const adminId = req.userId!;
   const { targetUserId, role } = req.body as {

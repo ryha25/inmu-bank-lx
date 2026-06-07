@@ -105,4 +105,60 @@ router.post("/balance/move-from-savings", requireAuth, async (req, res): Promise
   }
 });
 
+router.post("/balance/lock", requireAuth, async (req, res): Promise<void> => {
+  const userId = req.userId!;
+  const { amount, days } = req.body as { amount?: number; days?: number };
+  if (!amount || amount <= 0) {
+    res.status(400).json({ error: "Invalid amount" });
+    return;
+  }
+  if (!days || ![30, 90, 180, 365].includes(days)) {
+    res.status(400).json({ error: "days must be 30, 90, 180, or 365" });
+    return;
+  }
+  try {
+    const profile = await db
+      .select()
+      .from(profileTable)
+      .where(eq(profileTable.userId, userId))
+      .then((r) => r[0]);
+    if (!profile || Number(profile.balance) < amount) {
+      res.status(400).json({ error: "Insufficient balance" });
+      return;
+    }
+    const { jarsTable } = await import("@workspace/db/schema");
+    const now = new Date();
+    const unlockDate = new Date(now.getTime() + days * 24 * 60 * 60 * 1000);
+    const [jar] = await db
+      .insert(jarsTable)
+      .values({
+        userId,
+        name: `ロック (${days}日)`,
+        balance: String(amount),
+        isLocked: true,
+        lockDays: days,
+        lockStart: now,
+        unlockDate,
+      })
+      .returning();
+    await db
+      .update(profileTable)
+      .set({
+        balance: sql`${profileTable.balance} - ${amount}`,
+        updatedAt: new Date(),
+      })
+      .where(eq(profileTable.userId, userId));
+    await db.insert(transactionsTable).values({
+      userId,
+      type: "withdraw",
+      amount: String(amount),
+      category: "lock",
+      memo: `${days}日ロック`,
+    });
+    res.status(201).json({ ok: true, jar });
+  } catch {
+    res.status(500).json({ error: "Internal error" });
+  }
+});
+
 export default router;

@@ -1,11 +1,16 @@
 import { Card } from '@/components/ui/card'
 import { StatCard } from '@/components/stat-card'
 import { useI18n } from '@/lib/i18n/context'
-import { Trophy, Award, Gift, Users, ChevronRight } from 'lucide-react'
-import { Link } from 'wouter'
+import { Trophy, Award, Gift, Users } from 'lucide-react'
 
 export function CommunityView({ stats }: {
-  stats: { participations: number; receiveCount: number; totalReceivedInmu: number; rank: number; totalUsers: number }
+  stats: {
+    participations: number
+    receiveCount: number
+    totalReceivedInmu: number
+    rank: number
+    totalUsers: number
+  }
 }) {
   const { t } = useI18n()
 
@@ -26,28 +31,6 @@ export function CommunityView({ stats }: {
             ? '💪 上位30%に入っています！'
             : '📊 もっとINMUをアクティブになりましょう！'}
         </p>
-      </Card>
-
-      {/* ── Community quick-links ── */}
-      <Card className="border-border bg-card overflow-hidden">
-        <div className="px-4 py-3 border-b border-border">
-          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">コミュニティ機能</p>
-        </div>
-        <ul>
-          <li>
-            <Link
-              href="/ranking"
-              className="flex min-h-[52px] items-center gap-3 px-4 text-sm font-medium text-foreground transition-colors hover:bg-secondary active:bg-secondary"
-            >
-              <Trophy className="size-[18px] shrink-0 text-muted-foreground" />
-              <span className="flex-1">{t('nav_ranking')}</span>
-              <span className="text-xs text-muted-foreground mr-1">
-                {stats.rank > 0 ? `#${stats.rank}` : ''}
-              </span>
-              <ChevronRight className="size-4 text-muted-foreground" />
-            </Link>
-          </li>
-        </ul>
       </Card>
     </div>
   )
