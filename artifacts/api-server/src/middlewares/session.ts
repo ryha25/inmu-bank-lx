@@ -1,10 +1,14 @@
 import type { Request, Response, NextFunction } from "express";
+import { createHmac, timingSafeEqual } from "crypto";
 import { db } from "@workspace/db";
 import { profileTable } from "@workspace/db/schema";
 import { eq } from "drizzle-orm";
 
 export const SESSION_COOKIE = "inmu-session";
 export const DEMO_SESSION_COOKIE = SESSION_COOKIE;
+
+const SESSION_SECRET =
+  process.env.SESSION_SECRET ?? "inmu-bank-dev-secret-change-in-production-32chars";
 
 declare global {
   namespace Express {
@@ -16,6 +20,44 @@ declare global {
   }
 }
 
+function sign(payload: string): string {
+  return createHmac("sha256", SESSION_SECRET).update(payload).digest("base64url");
+}
+
+function makeToken(userId: string, email: string, name: string): string {
+  const payload = Buffer.from(JSON.stringify({ userId, email, name })).toString("base64url");
+  const sig = sign(payload);
+  return `${payload}.${sig}`;
+}
+
+function parseToken(token: string): { userId: string; email: string; name: string } | null {
+  const dot = token.lastIndexOf(".");
+  if (dot === -1) return null;
+  const payload = token.slice(0, dot);
+  const sig = token.slice(dot + 1);
+
+  const expectedSig = sign(payload);
+  try {
+    if (!timingSafeEqual(Buffer.from(sig), Buffer.from(expectedSig))) return null;
+  } catch {
+    return null;
+  }
+
+  try {
+    const data = JSON.parse(Buffer.from(payload, "base64url").toString("utf8")) as {
+      userId?: string; email?: string; name?: string;
+    };
+    if (!data.userId) return null;
+    return { userId: data.userId, email: data.email ?? "", name: data.name ?? "" };
+  } catch {
+    return null;
+  }
+}
+
+export function makeSessionValue(userId: string, email: string, name: string): string {
+  return makeToken(userId, email, name);
+}
+
 export function sessionMiddleware(
   req: Request,
   _res: Response,
@@ -23,17 +65,11 @@ export function sessionMiddleware(
 ): void {
   const cookie = req.cookies?.[SESSION_COOKIE];
   if (cookie && typeof cookie === "string") {
-    try {
-      const data = JSON.parse(Buffer.from(cookie, "base64url").toString("utf8")) as {
-        userId?: string; email?: string; name?: string;
-      };
-      if (data.userId) {
-        req.userId = data.userId;
-        req.userEmail = data.email;
-        req.userName = data.name;
-      }
-    } catch {
-      // ignore malformed cookie
+    const parsed = parseToken(cookie);
+    if (parsed) {
+      req.userId = parsed.userId;
+      req.userEmail = parsed.email;
+      req.userName = parsed.name;
     }
   }
   next();
@@ -74,8 +110,4 @@ export async function requireAdmin(
   } catch {
     res.status(500).json({ error: "Internal error" });
   }
-}
-
-export function makeSessionValue(userId: string, email: string, name: string): string {
-  return Buffer.from(JSON.stringify({ userId, email, name })).toString("base64url");
 }

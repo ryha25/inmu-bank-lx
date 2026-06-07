@@ -1,4 +1,5 @@
 import { Router } from "express";
+import bcrypt from "bcryptjs";
 import { db } from "@workspace/db";
 import { userTable, profileTable } from "@workspace/db/schema";
 import { eq } from "drizzle-orm";
@@ -6,7 +7,7 @@ import { SESSION_COOKIE, makeSessionValue } from "../middlewares/session";
 
 const router = Router();
 
-router.get("/session", async (req, res): Promise<void> => {
+router.get("/session", (req, res): void => {
   if (!req.userId) {
     res.status(401).json({ user: null });
     return;
@@ -27,13 +28,24 @@ router.post("/sign-in", async (req, res): Promise<void> => {
     return;
   }
   try {
-    let user = await db
+    const user = await db
       .select()
       .from(userTable)
       .where(eq(userTable.email, email))
       .then((r) => r[0]);
 
     if (!user) {
+      res.status(401).json({ error: "Invalid email or password" });
+      return;
+    }
+
+    if (!user.passwordHash) {
+      res.status(401).json({ error: "Invalid email or password" });
+      return;
+    }
+
+    const valid = await bcrypt.compare(password, user.passwordHash);
+    if (!valid) {
       res.status(401).json({ error: "Invalid email or password" });
       return;
     }
@@ -62,6 +74,10 @@ router.post("/sign-up", async (req, res): Promise<void> => {
     res.status(400).json({ error: "All fields required" });
     return;
   }
+  if (password.length < 8) {
+    res.status(400).json({ error: "Password must be at least 8 characters" });
+    return;
+  }
   try {
     const existing = await db
       .select()
@@ -72,11 +88,15 @@ router.post("/sign-up", async (req, res): Promise<void> => {
       res.status(400).json({ error: "Email already in use" });
       return;
     }
+
+    const passwordHash = await bcrypt.hash(password, 12);
     const userId = `user-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+
     await db.insert(userTable).values({
       id: userId,
       email,
       name,
+      passwordHash,
       emailVerified: false,
     });
     await ensureProfile(userId, name);
