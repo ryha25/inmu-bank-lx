@@ -12,13 +12,28 @@ export default async function AppLayout({
   const session = await getSession()
   if (!session?.user) redirect('/sign-in')
 
-  const profile = await ensureProfile()
-  const unread = await getUnreadCount()
+  let displayName = session.user.name || 'Demo User'
+  let isAdmin = false
+  let unread = 0
+
+  try {
+    const profile = await ensureProfile()
+    displayName = profile.displayName || displayName
+    isAdmin = profile.role === 'admin'
+  } catch {
+    // DB unavailable — show app with defaults
+  }
+
+  try {
+    unread = await getUnreadCount()
+  } catch {
+    unread = 0
+  }
 
   return (
     <AppShell
-      isAdmin={profile.role === 'admin'}
-      displayName={profile.displayName}
+      isAdmin={isAdmin}
+      displayName={displayName}
       unread={unread}
     >
       {children}

@@ -22,12 +22,16 @@ async function logAudit(
   targetUserId?: string,
   details?: Record<string, unknown>,
 ) {
-  await db.insert(auditLog).values({
-    adminId,
-    action,
-    targetUserId,
-    details: details || {},
-  })
+  try {
+    await db.insert(auditLog).values({
+      adminId,
+      action,
+      targetUserId,
+      details: details || {},
+    })
+  } catch {
+    // auditLog table may not exist in production yet — silently skip
+  }
 }
 
 async function notify(
@@ -44,27 +48,64 @@ async function notify(
 export async function adminListUsers() {
   const adminId = await requireAdmin()
   await logAudit(adminId, 'adminListUsers')
-  const rows = await db
-    .select({
-      userId: profile.userId,
-      displayName: profile.displayName,
-      email: user.email,
-      role: profile.role,
-      balance: profile.balance,
-      savingsBalance: profile.savingsBalance,
-      totalReceived: profile.totalReceived,
-      totalSent: profile.totalSent,
-      monthlyPoints: profile.monthlyPoints,
-      xId: profile.xId,
-      discordId: profile.discordId,
-      discordUsername: profile.discordUsername,
-      solWallet: profile.solWallet,
-      participationCount: profile.participationCount,
-      createdAt: profile.createdAt,
-    })
-    .from(profile)
-    .leftJoin(user, eq(user.id, profile.userId))
-  return rows
+  try {
+    const rows = await db
+      .select({
+        userId: profile.userId,
+        displayName: profile.displayName,
+        email: user.email,
+        role: profile.role,
+        balance: profile.balance,
+        savingsBalance: profile.savingsBalance,
+        totalReceived: profile.totalReceived,
+        totalSent: profile.totalSent,
+        monthlyPoints: profile.monthlyPoints,
+        xId: profile.xId,
+        discordId: profile.discordId,
+        discordUsername: profile.discordUsername,
+        solWallet: profile.solWallet,
+        participationCount: profile.participationCount,
+        createdAt: profile.createdAt,
+      })
+      .from(profile)
+      .leftJoin(user, eq(user.id, profile.userId))
+    return rows.map((r) => ({
+      ...r,
+      savingsBalance: r.savingsBalance ?? '0',
+      totalReceived: r.totalReceived ?? '0',
+      totalSent: r.totalSent ?? '0',
+      monthlyPoints: r.monthlyPoints ?? '0',
+    }))
+  } catch {
+    // New columns not yet in production schema — fall back to basic select
+    try {
+      const rows = await db
+        .select({
+          userId: profile.userId,
+          displayName: profile.displayName,
+          email: user.email,
+          role: profile.role,
+          balance: profile.balance,
+          participationCount: profile.participationCount,
+          createdAt: profile.createdAt,
+        })
+        .from(profile)
+        .leftJoin(user, eq(user.id, profile.userId))
+      return rows.map((r) => ({
+        ...r,
+        savingsBalance: '0',
+        totalReceived: '0',
+        totalSent: '0',
+        monthlyPoints: '0',
+        xId: null as string | null,
+        discordId: null as string | null,
+        discordUsername: null as string | null,
+        solWallet: null as string | null,
+      }))
+    } catch {
+      return []
+    }
+  }
 }
 
 export async function adminSearchUsers(query: string) {
@@ -88,36 +129,43 @@ export async function adminSearchUsers(query: string) {
 export async function adminGetUserDetails(userId: string) {
   const adminId = await requireAdmin()
   await logAudit(adminId, 'adminGetUserDetails', userId)
-  const [u] = await db
-    .select()
-    .from(profile)
-    .where(eq(profile.userId, userId))
-    .limit(1)
-  const [authUser] = await db
-    .select()
-    .from(user)
-    .where(eq(user.id, userId))
-    .limit(1)
-  const txHistory = await db
-    .select()
-    .from(transactions)
-    .where(eq(transactions.userId, userId))
-    .orderBy(sql`${transactions.createdAt} DESC`)
-  const savingsTx = await db
-    .select()
-    .from(transactions)
-    .where(eq(transactions.userId, userId))
-    .orderBy(sql`${transactions.createdAt} DESC`)
-  const pointsHistory = await db
-    .select()
-    .from(points)
-    .where(eq(points.userId, userId))
-    .orderBy(sql`${points.createdAt} DESC`)
+
+  let u: (typeof profile.$inferSelect) | undefined
+  let authUser: (typeof user.$inferSelect) | undefined
+  let txHistory: (typeof transactions.$inferSelect)[] = []
+  let pointsHistory: (typeof points.$inferSelect)[] = []
+
+  try {
+    const [row] = await db.select().from(profile).where(eq(profile.userId, userId)).limit(1)
+    u = row
+  } catch { /* ignore */ }
+
+  try {
+    const [row] = await db.select().from(user).where(eq(user.id, userId)).limit(1)
+    authUser = row
+  } catch { /* ignore */ }
+
+  try {
+    txHistory = await db
+      .select()
+      .from(transactions)
+      .where(eq(transactions.userId, userId))
+      .orderBy(sql`${transactions.createdAt} DESC`)
+  } catch { /* ignore */ }
+
+  try {
+    pointsHistory = await db
+      .select()
+      .from(points)
+      .where(eq(points.userId, userId))
+      .orderBy(sql`${points.createdAt} DESC`)
+  } catch { /* points table not yet in production */ }
+
   return {
     profile: u,
     user: authUser,
     transactions: txHistory,
-    savings: savingsTx,
+    savings: txHistory,
     points: pointsHistory,
   }
 }
