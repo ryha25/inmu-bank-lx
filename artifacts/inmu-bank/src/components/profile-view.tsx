@@ -6,7 +6,11 @@ import { useI18n } from '@/lib/i18n/context'
 import { formatInmu } from '@/lib/format'
 import { toast } from 'sonner'
 import { useState } from 'react'
-import { User, Wallet, Coins, TrendingUp, TrendingDown, Award, ExternalLink } from 'lucide-react'
+import { Link } from 'wouter'
+import {
+  User, Wallet, Coins, TrendingUp, TrendingDown, Award,
+  ExternalLink, Bell, Star, Shield, Lock, ChevronRight,
+} from 'lucide-react'
 
 type ProfileData = {
   userId: string
@@ -35,7 +39,17 @@ declare global {
   }
 }
 
-export function ProfileView({ profile, onRefresh }: { profile: ProfileData; onRefresh: () => void }) {
+type SecondaryLink = { href: string; label: string; icon: React.ElementType; adminOnly?: boolean }
+
+export function ProfileView({
+  profile,
+  isAdmin,
+  onRefresh,
+}: {
+  profile: ProfileData
+  isAdmin: boolean
+  onRefresh: () => void
+}) {
   const { t } = useI18n()
   const [loading, setLoading] = useState(false)
   const [phantomLoading, setPhantomLoading] = useState(false)
@@ -95,31 +109,80 @@ export function ProfileView({ profile, onRefresh }: { profile: ProfileData; onRe
     }
   }
 
+  const secondaryLinks: SecondaryLink[] = [
+    { href: '/balance',       label: t('nav_balance'),       icon: Coins },
+    { href: '/goals',         label: t('nav_goals'),         icon: Lock },
+    { href: '/notifications', label: t('nav_notifications'), icon: Bell },
+    { href: '/points',        label: t('nav_points'),        icon: Star },
+    { href: '/admin',         label: t('nav_admin'),         icon: Shield, adminOnly: true },
+  ]
+
+  const visibleLinks = secondaryLinks.filter(l => !l.adminOnly || isAdmin)
+
   return (
     <div className="flex flex-col gap-4">
       {/* Stats */}
       <div className="grid grid-cols-2 gap-3">
         <Card className="border-border bg-card p-4">
-          <div className="flex items-center gap-2"><Coins className="size-4 text-primary" /><p className="text-xs font-medium text-muted-foreground">{t('current_balance')}</p></div>
+          <div className="flex items-center gap-2">
+            <Coins className="size-4 text-primary" />
+            <p className="text-xs font-medium text-muted-foreground">{t('current_balance')}</p>
+          </div>
           <p className="mt-2 font-mono text-xl font-bold tabular-nums gold-text">{formatInmu(profile.balance)}</p>
         </Card>
         <Card className="border-border bg-card p-4">
-          <div className="flex items-center gap-2"><Wallet className="size-4 text-accent" /><p className="text-xs font-medium text-muted-foreground">{t('savings_title')}</p></div>
+          <div className="flex items-center gap-2">
+            <Wallet className="size-4 text-accent" />
+            <p className="text-xs font-medium text-muted-foreground">{t('savings_title')}</p>
+          </div>
           <p className="mt-2 font-mono text-xl font-bold tabular-nums">{formatInmu(profile.savingsBalance)}</p>
         </Card>
         <Card className="border-border bg-card p-4">
-          <div className="flex items-center gap-2"><TrendingUp className="size-4 text-chart-5" /><p className="text-xs font-medium text-muted-foreground">{t('total_received')}</p></div>
+          <div className="flex items-center gap-2">
+            <TrendingUp className="size-4 text-chart-5" />
+            <p className="text-xs font-medium text-muted-foreground">{t('total_received')}</p>
+          </div>
           <p className="mt-2 font-mono text-xl font-bold tabular-nums text-chart-5">{formatInmu(profile.totalReceived)}</p>
         </Card>
         <Card className="border-border bg-card p-4">
-          <div className="flex items-center gap-2"><TrendingDown className="size-4 text-destructive" /><p className="text-xs font-medium text-muted-foreground">{t('total_sent')}</p></div>
+          <div className="flex items-center gap-2">
+            <TrendingDown className="size-4 text-destructive" />
+            <p className="text-xs font-medium text-muted-foreground">{t('total_sent')}</p>
+          </div>
           <p className="mt-2 font-mono text-xl font-bold tabular-nums text-destructive">{formatInmu(profile.totalSent)}</p>
         </Card>
       </div>
 
       <Card className="border-border bg-card p-4">
-        <div className="flex items-center gap-2"><Award className="size-4 text-primary" /><p className="text-xs font-medium text-muted-foreground">{t('monthly_points')}</p></div>
+        <div className="flex items-center gap-2">
+          <Award className="size-4 text-primary" />
+          <p className="text-xs font-medium text-muted-foreground">{t('monthly_points')}</p>
+        </div>
         <p className="mt-2 font-mono text-xl font-bold tabular-nums">{formatInmu(profile.monthlyPoints)}</p>
+      </Card>
+
+      {/* ── Secondary nav links ── */}
+      <Card className="border-border bg-card overflow-hidden">
+        <div className="px-4 py-3 border-b border-border">
+          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">その他の機能</p>
+        </div>
+        <ul>
+          {visibleLinks.map((link, i) => {
+            const Icon = link.icon
+            return (
+              <li key={link.href} className={i > 0 ? 'border-t border-border' : ''}>
+                <Link
+                  href={link.href}
+                  className="flex min-h-[52px] items-center gap-3 px-4 text-sm font-medium text-foreground transition-colors hover:bg-secondary active:bg-secondary"
+                >
+                  <Icon className="size-[18px] shrink-0 text-muted-foreground" />
+                  <span className="flex-1">{link.label}</span>
+                  <ChevronRight className="size-4 text-muted-foreground" />
+                </Link>
+              </li>
+            )
+          })}
+        </ul>
       </Card>
 
       {/* Phantom wallet */}
@@ -130,7 +193,12 @@ export function ProfileView({ profile, onRefresh }: { profile: ProfileData; onRe
             <h3 className="font-semibold text-sm">Phantom Wallet</h3>
           </div>
           {form.solWallet && (
-            <a href={`https://solscan.io/account/${form.solWallet}`} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1 text-xs text-primary hover:underline">
+            <a
+              href={`https://solscan.io/account/${form.solWallet}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-1 text-xs text-primary hover:underline"
+            >
               Solscan <ExternalLink className="size-3" />
             </a>
           )}
@@ -181,7 +249,9 @@ export function ProfileView({ profile, onRefresh }: { profile: ProfileData; onRe
           </div>
           <Button onClick={handleSave} disabled={loading} className="min-h-11">{t('save')}</Button>
         </div>
-        <p className="mt-3 text-xs text-muted-foreground">{t('registered_at')}: {new Date(profile.createdAt).toLocaleDateString('ja-JP')}</p>
+        <p className="mt-3 text-xs text-muted-foreground">
+          {t('registered_at')}: {new Date(profile.createdAt).toLocaleDateString('ja-JP')}
+        </p>
       </Card>
     </div>
   )

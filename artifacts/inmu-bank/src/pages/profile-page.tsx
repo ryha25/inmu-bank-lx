@@ -24,7 +24,7 @@ export function ProfilePage() {
   return (
     <AppShell isAdmin={auth?.role === 'admin'} displayName={auth?.displayName ?? ''} unread={unread}>
       <PageHeader titleKey="nav_profile" />
-      {!profile ? <div className="py-20 text-center text-muted-foreground">{t('loading')}</div> : <ProfileView profile={profile} onRefresh={load} />}
+      {!profile ? <div className="py-20 text-center text-muted-foreground">{t('loading')}</div> : <ProfileView profile={profile} isAdmin={auth?.role === 'admin'} onRefresh={load} />}
     </AppShell>
   )
 }

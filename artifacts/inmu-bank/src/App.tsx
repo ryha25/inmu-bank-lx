@@ -18,6 +18,7 @@ import { NotificationsPage } from "@/pages/notifications-page";
 import { ProfilePage } from "@/pages/profile-page";
 import { PointsPage } from "@/pages/points-page";
 import { AdminPage } from "@/pages/admin-page";
+import { DevLoginPage } from "@/pages/dev-login-page";
 
 const queryClient = new QueryClient();
 
@@ -38,6 +39,7 @@ function Router() {
       <Route path="/profile" component={ProfilePage} />
       <Route path="/points" component={PointsPage} />
       <Route path="/admin" component={AdminPage} />
+      <Route path="/dev-login" component={DevLoginPage} />
       <Route path="/sign-in">
         <AuthForm mode="sign-in" />
       </Route>
