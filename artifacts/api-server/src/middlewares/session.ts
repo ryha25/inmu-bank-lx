@@ -7,8 +7,19 @@ import { eq } from "drizzle-orm";
 export const SESSION_COOKIE = "inmu-session";
 export const DEMO_SESSION_COOKIE = SESSION_COOKIE;
 
-const SESSION_SECRET =
-  process.env.SESSION_SECRET ?? "inmu-bank-dev-secret-change-in-production-32chars";
+function getSessionSecret(): string {
+  const secret = process.env.SESSION_SECRET;
+  if (!secret) {
+    if (process.env.NODE_ENV === "production") {
+      throw new Error("SESSION_SECRET environment variable is required in production");
+    }
+    console.warn("[WARN] SESSION_SECRET not set — using insecure dev-only default. Set SESSION_SECRET before deploying.");
+    return "inmu-bank-dev-only-insecure-secret-do-not-deploy";
+  }
+  return secret;
+}
+
+const SESSION_SECRET = getSessionSecret();
 
 declare global {
   namespace Express {
