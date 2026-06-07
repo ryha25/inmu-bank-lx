@@ -46,6 +46,12 @@ export async function ensureProfile() {
       userId: u.id,
       displayName: u.name || u.email.split('@')[0],
       role: 'admin',
+      balance: '0',
+      savingsBalance: '0',
+      totalReceived: '0',
+      totalSent: '0',
+      monthlyPoints: '0',
+      participationCount: 0,
     })
     .returning()
 

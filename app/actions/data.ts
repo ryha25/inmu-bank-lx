@@ -5,16 +5,19 @@ import {
   goals,
   jars,
   notifications,
+  points,
   profile,
   rewards,
   transactions,
+  loginStreaks,
+  activityFeed,
 } from '@/lib/db/schema'
-import { TX_OUTGOING_TYPES } from '@/lib/format'
+import { TX_INCOME_TYPES, TX_OUTGOING_TYPES } from '@/lib/format'
 import { and, desc, eq, gte, sql } from 'drizzle-orm'
 import { revalidatePath } from 'next/cache'
 import { ensureProfile, getUserId } from './auth-helpers'
 
-// ─────────────────────────── Dashboard ───────────────────────────
+// ── Dashboard ──
 
 export async function getDashboard() {
   const userId = await getUserId()
@@ -29,14 +32,10 @@ export async function getDashboard() {
     .from(transactions)
     .where(eq(transactions.userId, userId))
 
-  let totalReceived = 0
-  let totalSent = 0
   let monthlyChange = 0
   for (const t of allTx) {
     const amt = Number(t.amount)
     const outgoing = TX_OUTGOING_TYPES.includes(t.type)
-    if (outgoing) totalSent += amt
-    else totalReceived += amt
     if (new Date(t.createdAt) >= startOfMonth) {
       monthlyChange += outgoing ? -amt : amt
     }
@@ -47,10 +46,7 @@ export async function getDashboard() {
 
   const goalRows = await db.select().from(goals).where(eq(goals.userId, userId))
   const goalTotalTarget = goalRows.reduce((s, g) => s + Number(g.targetAmount), 0)
-  const goalTotalCurrent = goalRows.reduce(
-    (s, g) => s + Number(g.currentAmount),
-    0,
-  )
+  const goalTotalCurrent = goalRows.reduce((s, g) => s + Number(g.currentAmount), 0)
   const goalRate =
     goalTotalTarget > 0
       ? Math.min(100, (goalTotalCurrent / goalTotalTarget) * 100)
@@ -63,18 +59,27 @@ export async function getDashboard() {
     .orderBy(desc(transactions.createdAt))
     .limit(6)
 
+  // Current month's points
+  const currentMonth = `${startOfMonth.getFullYear()}-${String(startOfMonth.getMonth() + 1).padStart(2, '0')}`
+  const monthlyPoints = await db
+    .select({ total: sql<number>`COALESCE(SUM(${points.amount}),0)::float` })
+    .from(points)
+    .where(and(eq(points.userId, userId), eq(points.month, currentMonth)))
+
   return {
     balance: Number(p.balance),
+    savingsBalance: Number(p.savingsBalance),
+    totalReceived: Number(p.totalReceived),
+    totalSent: Number(p.totalSent),
+    monthlyPoints: monthlyPoints[0]?.total ?? 0,
     monthlyChange,
-    totalReceived,
-    totalSent,
     jarTotal,
     goalRate,
     recent,
   }
 }
 
-// ─────────────────────────── Transactions ───────────────────────────
+// ── Transactions ──
 
 export async function getTransactions(filters?: {
   type?: string
@@ -117,7 +122,88 @@ export async function getTransfers() {
     .orderBy(desc(transactions.createdAt))
 }
 
-// ─────────────────────────── Jars ───────────────────────────
+// ── User Transfer (P2P) ──
+
+export async function sendInmu(targetUserId: string, amount: number, memo?: string) {
+  const userId = await getUserId()
+  if (amount <= 0) throw new Error('Amount must be positive')
+  if (userId === targetUserId) throw new Error('Cannot send to yourself')
+
+  const [sender] = await db
+    .select()
+    .from(profile)
+    .where(eq(profile.userId, userId))
+    .limit(1)
+  if (!sender || Number(sender.balance) < amount) {
+    throw new Error('Insufficient balance')
+  }
+
+  const [target] = await db
+    .select()
+    .from(profile)
+    .where(eq(profile.userId, targetUserId))
+    .limit(1)
+  if (!target) throw new Error('Recipient not found')
+
+  // Atomic: deduct sender, add receiver, record both transactions
+  await db
+    .update(profile)
+    .set({
+      balance: sql`${profile.balance} - ${amount}`,
+      totalSent: sql`${profile.totalSent} + ${amount}`,
+      updatedAt: new Date(),
+    })
+    .where(eq(profile.userId, userId))
+
+  await db
+    .update(profile)
+    .set({
+      balance: sql`${profile.balance} + ${amount}`,
+      totalReceived: sql`${profile.totalReceived} + ${amount}`,
+      updatedAt: new Date(),
+    })
+    .where(eq(profile.userId, targetUserId))
+
+  await db.insert(transactions).values({
+    userId,
+    type: 'send',
+    amount: String(amount),
+    counterparty: target.displayName || 'Unknown',
+    counterpartyId: targetUserId,
+    memo: memo || 'P2P Transfer',
+  })
+
+  await db.insert(transactions).values({
+    userId: targetUserId,
+    type: 'receive',
+    amount: String(amount),
+    counterparty: sender.displayName || 'Unknown',
+    counterpartyId: userId,
+    memo: memo || 'P2P Transfer',
+  })
+
+  await db.insert(notifications).values({
+    userId: targetUserId,
+    type: 'transfer',
+    title: 'INMU受取',
+    message: `${sender.displayName || 'Unknown'} から ${amount} INMU 受取`,
+  })
+
+  await db.insert(activityFeed).values({
+    type: 'transfer',
+    userId,
+    targetUserId,
+    amount: String(amount),
+    message: `${sender.displayName} → ${target.displayName}`,
+  })
+
+  revalidatePath('/transfers')
+  revalidatePath('/balance')
+  revalidatePath('/')
+  return { success: true }
+}
+
+// ── Jars ──
 
 export async function getJars() {
   const userId = await getUserId()
@@ -141,11 +227,26 @@ export async function depositToJar(jarId: number, amount: number) {
     .from(jars)
     .where(and(eq(jars.id, jarId), eq(jars.userId, userId)))
   if (!jar) throw new Error('Jar not found')
+
+  const [p] = await db
+    .select()
+    .from(profile)
+    .where(eq(profile.userId, userId))
+    .limit(1)
+  if (!p || Number(p.balance) < amount) throw new Error('Insufficient balance')
+
+  await db
+    .update(profile)
+    .set({ balance: sql`${profile.balance} - ${amount}`, updatedAt: new Date() })
+    .where(eq(profile.userId, userId))
+
   await db
     .update(jars)
     .set({ balance: sql`${jars.balance} + ${amount}` })
     .where(and(eq(jars.id, jarId), eq(jars.userId, userId)))
+
   revalidatePath('/jars')
+  revalidatePath('/')
 }
 
 export async function withdrawFromJar(jarId: number, amount: number) {
@@ -162,7 +263,14 @@ export async function withdrawFromJar(jarId: number, amount: number) {
     .update(jars)
     .set({ balance: sql`GREATEST(${jars.balance} - ${amount}, 0)` })
     .where(and(eq(jars.id, jarId), eq(jars.userId, userId)))
+
+  await db
+    .update(profile)
+    .set({ balance: sql`${profile.balance} + ${amount}`, updatedAt: new Date() })
+    .where(eq(profile.userId, userId))
+
   revalidatePath('/jars')
+  revalidatePath('/')
 }
 
 export async function lockJar(jarId: number, days: number) {
@@ -183,7 +291,78 @@ export async function deleteJar(jarId: number) {
   revalidatePath('/jars')
 }
 
-// ─────────────────────────── Goals ───────────────────────────
+// ── Savings (move to/from savings wallet) ──
+
+export async function moveToSavings(amount: number) {
+  const userId = await getUserId()
+  const [p] = await db
+    .select()
+    .from(profile)
+    .where(eq(profile.userId, userId))
+    .limit(1)
+  if (!p || Number(p.balance) < amount) throw new Error('Insufficient balance')
+
+  await db
+    .update(profile)
+    .set({
+      balance: sql`${profile.balance} - ${amount}`,
+      savingsBalance: sql`${profile.savingsBalance} + ${amount}`,
+      updatedAt: new Date(),
+    })
+    .where(eq(profile.userId, userId))
+
+  await db.insert(transactions).values({
+    userId,
+    type: 'deposit',
+    amount: String(amount),
+    category: 'savings',
+    memo: 'Moved to savings',
+  })
+
+  revalidatePath('/')
+  revalidatePath('/balance')
+}
+
+export async function moveFromSavings(amount: number) {
+  const userId = await getUserId()
+  const [p] = await db
+    .select()
+    .from(profile)
+    .where(eq(profile.userId, userId))
+    .limit(1)
+  if (!p || Number(p.savingsBalance) < amount) throw new Error('Insufficient savings')
+
+  await db
+    .update(profile)
+    .set({
+      balance: sql`${profile.balance} + ${amount}`,
+      savingsBalance: sql`${profile.savingsBalance} - ${amount}`,
+      updatedAt: new Date(),
+    })
+    .where(eq(profile.userId, userId))
+
+  await db.insert(transactions).values({
+    userId,
+    type: 'withdraw',
+    amount: String(amount),
+    category: 'savings',
+    memo: 'Moved from savings',
+  })
+
+  revalidatePath('/')
+  revalidatePath('/balance')
+}
+
+export async function getSavingsHistory() {
+  const userId = await getUserId()
+  return db
+    .select()
+    .from(transactions)
+    .where(and(eq(transactions.userId, userId), eq(transactions.category, 'savings')))
+    .orderBy(desc(transactions.createdAt))
+}
+
+// ── Goals ──
 
 export async function getGoals() {
   const userId = await getUserId()
@@ -215,7 +394,7 @@ export async function deleteGoal(goalId: number) {
   revalidatePath('/goals')
 }
 
-// ─────────────────────────── Rewards ───────────────────────────
+// ── Rewards ──
 
 export async function getRewards() {
   const userId = await getUserId()
@@ -226,7 +405,7 @@ export async function getRewards() {
     .orderBy(desc(rewards.createdAt))
 }
 
-// ─────────────────────────── Airdrops ───────────────────────────
+// ── Airdrops ──
 
 export async function getAirdrops() {
   const userId = await getUserId()
@@ -238,7 +417,7 @@ export async function getAirdrops() {
   return { received }
 }
 
-// ─────────────────────────── Notifications ───────────────────────────
+// ── Notifications ──
 
 export async function getNotifications() {
   const userId = await getUserId()
@@ -268,7 +447,7 @@ export async function markAllRead() {
   revalidatePath('/notifications')
 }
 
-// ─────────────────────────── Community / Ranking ───────────────────────────
+// ── Community / Ranking ──
 
 export async function getCommunityStats() {
   const userId = await getUserId()
@@ -286,7 +465,6 @@ export async function getCommunityStats() {
     .filter((t) => !TX_OUTGOING_TYPES.includes(t.type))
     .reduce((s, t) => s + Number(t.amount), 0)
 
-  // rank by balance
   const allProfiles = await db
     .select({ userId: profile.userId, balance: profile.balance })
     .from(profile)
@@ -315,7 +493,6 @@ export async function getRanking() {
     .orderBy(desc(profile.balance))
     .limit(50)
 
-  // total received per user
   const totals = await db
     .select({
       userId: transactions.userId,
@@ -326,7 +503,6 @@ export async function getRanking() {
 
   const totalMap = new Map(totals.map((t) => [t.userId, Number(t.total)]))
 
-  // NOTE: solWallet intentionally NOT included — ranking never exposes wallet.
   return rows.map((r, i) => ({
     rank: i + 1,
     userId: r.userId,
@@ -337,7 +513,131 @@ export async function getRanking() {
   }))
 }
 
-// ─────────────────────────── Profile ───────────────────────────
+// ── Points System ──
+
+function getCurrentMonth() {
+  const d = new Date()
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+}
+
+export async function getPoints() {
+  const userId = await getUserId()
+  const currentMonth = getCurrentMonth()
+
+  const monthTotal = await db
+    .select({ total: sql<number>`COALESCE(SUM(${points.amount}),0)::float` })
+    .from(points)
+    .where(and(eq(points.userId, userId), eq(points.month, currentMonth)))
+
+  const allPoints = await db
+    .select()
+    .from(points)
+    .where(eq(points.userId, userId))
+    .orderBy(desc(points.createdAt))
+
+  return {
+    monthlyTotal: monthTotal[0]?.total ?? 0,
+    allPoints,
+  }
+}
+
+export async function claimDailyLogin() {
+  const userId = await getUserId()
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+
+  const [streak] = await db
+    .select()
+    .from(loginStreaks)
+    .where(eq(loginStreaks.userId, userId))
+    .limit(1)
+
+  let bonus = 10
+  let newStreak = 1
+
+  if (streak) {
+    const lastLogin = new Date(streak.lastLogin)
+    lastLogin.setHours(0, 0, 0, 0)
+    const diffDays = Math.floor((today.getTime() - lastLogin.getTime()) / (1000 * 60 * 60 * 24))
+
+    if (diffDays === 1) {
+      newStreak = streak.streak + 1
+      bonus = Math.min(10 + newStreak * 2, 50)
+    } else if (diffDays === 0) {
+      return { alreadyClaimed: true, bonus: 0, streak: streak.streak }
+    }
+  }
+
+  await db
+    .insert(loginStreaks)
+    .values({ userId, lastLogin: today, streak: newStreak })
+    .onConflictDoUpdate({
+      target: loginStreaks.userId,
+      set: { lastLogin: today, streak: newStreak },
+    })
+
+  await db.insert(points).values({
+    userId,
+    amount: String(bonus),
+    type: 'daily_login',
+    month: getCurrentMonth(),
+    source: `Day ${newStreak} streak`,
+  })
+
+  await db
+    .update(profile)
+    .set({
+      monthlyPoints: sql`${profile.monthlyPoints} + ${bonus}`,
+      updatedAt: new Date(),
+    })
+    .where(eq(profile.userId, userId))
+
+  return { alreadyClaimed: false, bonus, streak: newStreak }
+}
+
+export async function getPointsLeaderboard() {
+  const currentMonth = getCurrentMonth()
+  const rows = await db
+    .select({
+      userId: points.userId,
+      total: sql<number>`SUM(${points.amount})`,
+    })
+    .from(points)
+    .where(eq(points.month, currentMonth))
+    .groupBy(points.userId)
+    .orderBy(sql`SUM(${points.amount}) DESC`)
+    .limit(50)
+
+  const profileRows = await db
+    .select({
+      userId: profile.userId,
+      displayName: profile.displayName,
+    })
+    .from(profile)
+    .where(sql`${profile.userId} IN (${rows.map((r) => `'${r.userId}'`).join(',')})`)
+
+  const nameMap = new Map(profileRows.map((p) => [p.userId, p.displayName]))
+
+  return rows.map((r, i) => ({
+    rank: i + 1,
+    userId: r.userId,
+    displayName: nameMap.get(r.userId) || 'INMU User',
+    points: Number(r.total),
+  }))
+}
+
+// ── Activity Feed ──
+
+export async function getActivityFeed() {
+  await getUserId()
+  return db
+    .select()
+    .from(activityFeed)
+    .orderBy(desc(activityFeed.createdAt))
+    .limit(50)
+}
+
+// ── Profile ──
 
 export async function getMyProfile() {
   await getUserId()
@@ -348,7 +648,9 @@ export async function updateMyProfile(input: {
   displayName?: string
   xId?: string
   discordId?: string
+  discordUsername?: string
   solWallet?: string
+  avatar?: string
 }) {
   const userId = await getUserId()
   await ensureProfile()
@@ -358,9 +660,20 @@ export async function updateMyProfile(input: {
       displayName: input.displayName,
       xId: input.xId,
       discordId: input.discordId,
+      discordUsername: input.discordUsername,
       solWallet: input.solWallet,
+      avatar: input.avatar,
       updatedAt: new Date(),
     })
     .where(eq(profile.userId, userId))
   revalidatePath('/profile')
+}
+
+export async function getUserProfile(userId: string) {
+  const [p] = await db
+    .select()
+    .from(profile)
+    .where(eq(profile.userId, userId))
+    .limit(1)
+  return p ?? null
 }

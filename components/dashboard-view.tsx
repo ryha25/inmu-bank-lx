@@ -14,6 +14,8 @@ import {
   Target,
   TrendingUp,
   Wallet,
+  Award,
+  Sparkles,
 } from 'lucide-react'
 import Link from 'next/link'
 
@@ -32,19 +34,31 @@ export function DashboardView({
 }: {
   data: {
     balance: number
+    savingsBalance: number
     monthlyChange: number
     totalReceived: number
     totalSent: number
     jarTotal: number
     goalRate: number
+    monthlyPoints: number
     recent: Tx[]
   }
   displayName: string
 }) {
   const { t, locale } = useI18n()
 
+  const totalHoldings = data.balance + data.savingsBalance + data.jarTotal
+
   return (
     <div className="flex flex-col gap-5">
+      {/* Welcome */}
+      <div className="flex items-center gap-2">
+        <Sparkles className="size-4 text-primary" />
+        <p className="text-sm font-medium text-muted-foreground">
+          {displayName ? `${displayName}さん、ようこそ` : 'Welcome'}
+        </p>
+      </div>
+
       {/* Hero balance */}
       <Card className="relative overflow-hidden border-border bg-card p-6">
         <div
@@ -52,17 +66,28 @@ export function DashboardView({
           style={{ background: 'oklch(0.82 0.13 85)' }}
           aria-hidden="true"
         />
-        <div className="flex items-center gap-2">
-          <Wallet className="size-4 text-primary" />
-          <p className="text-sm font-medium text-muted-foreground">
-            {t('current_balance')}
-          </p>
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Wallet className="size-4 text-primary" />
+            <p className="text-sm font-medium text-muted-foreground">
+              {t('current_balance')}
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            <Award className="size-4 text-chart-5" />
+            <span className="text-xs font-medium text-chart-5">
+              {formatInmu(data.monthlyPoints)} pts
+            </span>
+          </div>
         </div>
         <p className="mt-3 font-mono text-4xl font-bold tracking-tight gold-text lg:text-5xl">
           {formatInmu(data.balance)}
           <span className="ml-2 text-lg font-medium text-muted-foreground">
             INMU
           </span>
+        </p>
+        <p className="mt-2 text-sm text-muted-foreground">
+          {t('total_holding')}: {formatInmu(totalHoldings)} INMU
         </p>
         <div className="mt-4 flex items-center gap-2 text-sm">
           <span
@@ -110,6 +135,24 @@ export function DashboardView({
           suffix="%"
         />
       </div>
+
+      {/* Savings quick card */}
+      {data.savingsBalance > 0 && (
+        <Card className="border-border bg-card p-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <PiggyBank className="size-4 text-accent" />
+              <p className="text-sm font-medium text-muted-foreground">Savings Balance</p>
+            </div>
+            <Link href="/balance" className="text-xs font-medium text-primary hover:underline">
+              {t('view_all')}
+            </Link>
+          </div>
+          <p className="mt-2 font-mono text-xl font-bold tabular-nums">
+            {formatInmu(data.savingsBalance)}
+          </p>
+        </Card>
+      )}
 
       {/* Recent activity */}
       <Card className="border-border bg-card">

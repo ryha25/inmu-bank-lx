@@ -2,9 +2,11 @@
 
 import { db } from '@/lib/db'
 import {
+  auditLog,
   goals,
   jars,
   notifications,
+  points,
   profile,
   rewards,
   transactions,
@@ -14,29 +16,19 @@ import { eq, sql } from 'drizzle-orm'
 import { revalidatePath } from 'next/cache'
 import { requireAdmin } from './auth-helpers'
 
-// ─────────────────────────── User listing ───────────────────────────
-
-export async function adminListUsers() {
-  await requireAdmin()
-  const rows = await db
-    .select({
-      userId: profile.userId,
-      displayName: profile.displayName,
-      email: user.email,
-      role: profile.role,
-      balance: profile.balance,
-      xId: profile.xId,
-      discordId: profile.discordId,
-      solWallet: profile.solWallet,
-      participationCount: profile.participationCount,
-      createdAt: profile.createdAt,
-    })
-    .from(profile)
-    .leftJoin(user, eq(user.id, profile.userId))
-  return rows
+async function logAudit(
+  adminId: string,
+  action: string,
+  targetUserId?: string,
+  details?: Record<string, unknown>,
+) {
+  await db.insert(auditLog).values({
+    adminId,
+    action,
+    targetUserId,
+    details: details || {},
+  })
 }
-
-// ─────────────────────────── Balance / transactions ───────────────────────────
 
 async function notify(
   userId: string,
@@ -47,21 +39,172 @@ async function notify(
   await db.insert(notifications).values({ userId, type, title, message })
 }
 
+// ── User listing ──
+
+export async function adminListUsers() {
+  const adminId = await requireAdmin()
+  await logAudit(adminId, 'adminListUsers')
+  const rows = await db
+    .select({
+      userId: profile.userId,
+      displayName: profile.displayName,
+      email: user.email,
+      role: profile.role,
+      balance: profile.balance,
+      savingsBalance: profile.savingsBalance,
+      totalReceived: profile.totalReceived,
+      totalSent: profile.totalSent,
+      monthlyPoints: profile.monthlyPoints,
+      xId: profile.xId,
+      discordId: profile.discordId,
+      discordUsername: profile.discordUsername,
+      solWallet: profile.solWallet,
+      participationCount: profile.participationCount,
+      createdAt: profile.createdAt,
+    })
+    .from(profile)
+    .leftJoin(user, eq(user.id, profile.userId))
+  return rows
+}
+
+export async function adminSearchUsers(query: string) {
+  const adminId = await requireAdmin()
+  await logAudit(adminId, 'adminSearchUsers', undefined, { query })
+  const rows = await db
+    .select({
+      userId: profile.userId,
+      displayName: profile.displayName,
+      email: user.email,
+      role: profile.role,
+      balance: profile.balance,
+      participationCount: profile.participationCount,
+    })
+    .from(profile)
+    .leftJoin(user, eq(user.id, profile.userId))
+    .where(sql`LOWER(${profile.displayName}) LIKE ${'%' + query.toLowerCase() + '%'}`)
+  return rows
+}
+
+export async function adminGetUserDetails(userId: string) {
+  const adminId = await requireAdmin()
+  await logAudit(adminId, 'adminGetUserDetails', userId)
+  const [u] = await db
+    .select()
+    .from(profile)
+    .where(eq(profile.userId, userId))
+    .limit(1)
+  const [authUser] = await db
+    .select()
+    .from(user)
+    .where(eq(user.id, userId))
+    .limit(1)
+  const txHistory = await db
+    .select()
+    .from(transactions)
+    .where(eq(transactions.userId, userId))
+    .orderBy(sql`${transactions.createdAt} DESC`)
+  const savingsTx = await db
+    .select()
+    .from(transactions)
+    .where(eq(transactions.userId, userId))
+    .orderBy(sql`${transactions.createdAt} DESC`)
+  const pointsHistory = await db
+    .select()
+    .from(points)
+    .where(eq(points.userId, userId))
+    .orderBy(sql`${points.createdAt} DESC`)
+  return {
+    profile: u,
+    user: authUser,
+    transactions: txHistory,
+    savings: savingsTx,
+    points: pointsHistory,
+  }
+}
+
+// ── Balance / transactions ──
+
 export async function adminChangeBalance(
   targetUserId: string,
   newBalance: number,
   reason: string,
 ) {
-  await requireAdmin()
+  const adminId = await requireAdmin()
   await db
     .update(profile)
     .set({ balance: String(newBalance), updatedAt: new Date() })
     .where(eq(profile.userId, targetUserId))
+  await logAudit(adminId, 'adminChangeBalance', targetUserId, {
+    newBalance,
+    reason,
+  })
   await notify(
     targetUserId,
     'deposit',
     '残高が更新されました',
     reason || `残高が ${newBalance} に設定されました`,
+  )
+  revalidatePath('/admin')
+}
+
+export async function adminAddInmu(
+  targetUserId: string,
+  amount: number,
+  reason: string,
+) {
+  const adminId = await requireAdmin()
+  await db
+    .update(profile)
+    .set({
+      balance: sql`${profile.balance} + ${amount}`,
+      totalReceived: sql`${profile.totalReceived} + ${amount}`,
+      updatedAt: new Date(),
+    })
+    .where(eq(profile.userId, targetUserId))
+  await db.insert(transactions).values({
+    userId: targetUserId,
+    type: 'deposit',
+    amount: String(amount),
+    counterparty: 'Admin',
+    memo: reason,
+  })
+  await logAudit(adminId, 'adminAddInmu', targetUserId, { amount, reason })
+  await notify(
+    targetUserId,
+    'deposit',
+    'INMU が追加されました',
+    `${amount} INMU 追加 (${reason})`,
+  )
+  revalidatePath('/admin')
+}
+
+export async function adminRemoveInmu(
+  targetUserId: string,
+  amount: number,
+  reason: string,
+) {
+  const adminId = await requireAdmin()
+  await db
+    .update(profile)
+    .set({
+      balance: sql`GREATEST(${profile.balance} - ${amount}, 0)`,
+      totalSent: sql`${profile.totalSent} + ${amount}`,
+      updatedAt: new Date(),
+    })
+    .where(eq(profile.userId, targetUserId))
+  await db.insert(transactions).values({
+    userId: targetUserId,
+    type: 'withdraw',
+    amount: String(amount),
+    counterparty: 'Admin',
+    memo: reason,
+  })
+  await logAudit(adminId, 'adminRemoveInmu', targetUserId, { amount, reason })
+  await notify(
+    targetUserId,
+    'withdraw',
+    'INMU が処分されました',
+    `${amount} INMU 処分 (${reason})`,
   )
   revalidatePath('/admin')
 }
@@ -73,7 +216,7 @@ export async function adminRegisterTx(input: {
   counterparty?: string
   memo?: string
 }) {
-  await requireAdmin()
+  const adminId = await requireAdmin()
   const { targetUserId, type, amount, counterparty, memo } = input
   await db.insert(transactions).values({
     userId: targetUserId,
@@ -92,6 +235,7 @@ export async function adminRegisterTx(input: {
       updatedAt: new Date(),
     })
     .where(eq(profile.userId, targetUserId))
+  await logAudit(adminId, 'adminRegisterTx', targetUserId, { type, amount, memo })
   await notify(
     targetUserId,
     outgoing ? 'withdraw' : 'deposit',
@@ -107,7 +251,7 @@ export async function adminDistributeReward(input: {
   amount: number
   memo?: string
 }) {
-  await requireAdmin()
+  const adminId = await requireAdmin()
   const { targetUserId, type, amount, memo } = input
   await db.insert(rewards).values({
     userId: targetUserId,
@@ -130,6 +274,7 @@ export async function adminDistributeReward(input: {
       updatedAt: new Date(),
     })
     .where(eq(profile.userId, targetUserId))
+  await logAudit(adminId, 'adminDistributeReward', targetUserId, { type, amount })
   await notify(targetUserId, 'reward', '報酬が配布されました', `${amount} INMU (${type})`)
   revalidatePath('/admin')
 }
@@ -139,7 +284,7 @@ export async function adminDistributeAirdrop(input: {
   amount: number
   memo?: string
 }) {
-  await requireAdmin()
+  const adminId = await requireAdmin()
   const { targetUserIds, amount, memo } = input
   for (const targetUserId of targetUserIds) {
     await db.insert(transactions).values({
@@ -163,65 +308,121 @@ export async function adminDistributeAirdrop(input: {
       `${amount} INMU`,
     )
   }
+  await logAudit(adminId, 'adminDistributeAirdrop', undefined, {
+    count: targetUserIds.length,
+    amount,
+  })
+  revalidatePath('/admin')
+}
+
+export async function adminAdjustPoints(
+  targetUserId: string,
+  amount: number,
+  reason: string,
+) {
+  const adminId = await requireAdmin()
+  await db.insert(points).values({
+    userId: targetUserId,
+    amount: String(amount),
+    type: 'admin',
+    month: `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}`,
+    source: reason,
+  })
+  await db
+    .update(profile)
+    .set({
+      monthlyPoints: sql`${profile.monthlyPoints} + ${amount}`,
+      updatedAt: new Date(),
+    })
+    .where(eq(profile.userId, targetUserId))
+  await logAudit(adminId, 'adminAdjustPoints', targetUserId, { amount, reason })
+  await notify(
+    targetUserId,
+    'points',
+    'ポイントが調整されました',
+    `${amount > 0 ? '+' : ''}${amount} ポイント (${reason})`,
+  )
   revalidatePath('/admin')
 }
 
 export async function adminSetRole(targetUserId: string, role: 'user' | 'admin') {
-  await requireAdmin()
+  const adminId = await requireAdmin()
   await db
     .update(profile)
     .set({ role, updatedAt: new Date() })
     .where(eq(profile.userId, targetUserId))
+  await logAudit(adminId, 'adminSetRole', targetUserId, { role })
   revalidatePath('/admin')
 }
 
-// ─────────────────────────── Reset functions ───────────────────────────
+// ── Audit log ──
+
+export async function adminGetAuditLog() {
+  const adminId = await requireAdmin()
+  await logAudit(adminId, 'adminGetAuditLog')
+  return db
+    .select()
+    .from(auditLog)
+    .orderBy(sql`${auditLog.createdAt} DESC`)
+    .limit(500)
+}
+
+// ── Reset functions ──
 
 export async function adminResetUserBalance(targetUserId: string) {
-  await requireAdmin()
+  const adminId = await requireAdmin()
   await db
     .update(profile)
     .set({ balance: '0', updatedAt: new Date() })
     .where(eq(profile.userId, targetUserId))
+  await logAudit(adminId, 'adminResetUserBalance', targetUserId)
   revalidatePath('/admin')
 }
 
 export async function adminResetUserHistory(targetUserId: string) {
-  await requireAdmin()
+  const adminId = await requireAdmin()
   await db.delete(transactions).where(eq(transactions.userId, targetUserId))
   await db.delete(rewards).where(eq(rewards.userId, targetUserId))
+  await logAudit(adminId, 'adminResetUserHistory', targetUserId)
   revalidatePath('/admin')
 }
 
 export async function adminResetUser(targetUserId: string) {
-  await requireAdmin()
+  const adminId = await requireAdmin()
   await db.delete(transactions).where(eq(transactions.userId, targetUserId))
   await db.delete(rewards).where(eq(rewards.userId, targetUserId))
   await db.delete(jars).where(eq(jars.userId, targetUserId))
   await db.delete(goals).where(eq(goals.userId, targetUserId))
   await db.delete(notifications).where(eq(notifications.userId, targetUserId))
+  await db.delete(points).where(eq(points.userId, targetUserId))
   await db
     .update(profile)
-    .set({ balance: '0', participationCount: 0, updatedAt: new Date() })
+    .set({ balance: '0', savingsBalance: '0', totalReceived: '0', totalSent: '0', monthlyPoints: '0', participationCount: 0, updatedAt: new Date() })
     .where(eq(profile.userId, targetUserId))
+  await logAudit(adminId, 'adminResetUser', targetUserId)
   revalidatePath('/admin')
 }
 
 export async function adminResetAll() {
-  await requireAdmin()
+  const adminId = await requireAdmin()
   await db.delete(transactions)
   await db.delete(rewards)
   await db.delete(jars)
   await db.delete(goals)
   await db.delete(notifications)
-  await db.update(profile).set({ balance: '0', participationCount: 0 })
+  await db.delete(points)
+  await db.delete(loginStreaks)
+  await db.delete(auditLog)
+  await db.update(profile).set({ balance: '0', savingsBalance: '0', totalReceived: '0', totalSent: '0', monthlyPoints: '0', participationCount: 0 })
+  await logAudit(adminId, 'adminResetAll')
   revalidatePath('/admin')
 }
 
-// ─────────────────────────── CSV backup (admin includes wallet) ───────────────────────────
+// ── CSV backup ──
 
 export async function adminBackupCsv(): Promise<string> {
-  await requireAdmin()
+  const adminId = await requireAdmin()
+  await logAudit(adminId, 'adminBackupCsv')
   const users = await db
     .select({
       userId: profile.userId,
@@ -229,8 +430,10 @@ export async function adminBackupCsv(): Promise<string> {
       email: user.email,
       role: profile.role,
       balance: profile.balance,
+      savingsBalance: profile.savingsBalance,
       xId: profile.xId,
       discordId: profile.discordId,
+      discordUsername: profile.discordUsername,
       solWallet: profile.solWallet,
       participationCount: profile.participationCount,
     })
@@ -243,8 +446,10 @@ export async function adminBackupCsv(): Promise<string> {
     'email',
     'role',
     'balance',
+    'savingsBalance',
     'xId',
     'discordId',
+    'discordUsername',
     'solWallet',
     'participationCount',
   ]
@@ -261,9 +466,11 @@ export async function adminBackupCsv(): Promise<string> {
         u.email,
         u.role,
         u.balance,
+        u.savingsBalance,
         u.xId,
         u.discordId,
-        u.solWallet, // admin backup includes wallet
+        u.discordUsername,
+        u.solWallet,
         u.participationCount,
       ]
         .map(escape)

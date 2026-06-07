@@ -6,9 +6,10 @@ import {
   serial,
   text,
   timestamp,
+  jsonb,
 } from 'drizzle-orm/pg-core'
 
-// ── Better Auth tables (column names must match Better Auth defaults) ──
+// ── Auth tables (keep for compatibility) ──
 export const user = pgTable('user', {
   id: text('id').primaryKey(),
   name: text('name').notNull(),
@@ -65,9 +66,15 @@ export const profile = pgTable('profile', {
   displayName: text('displayName').notNull().default(''),
   xId: text('xId'),
   discordId: text('discordId'),
+  discordUsername: text('discordUsername'),
   solWallet: text('solWallet'),
+  avatar: text('avatar'),
   role: text('role').notNull().default('user'),
   balance: numeric('balance').notNull().default('0'),
+  savingsBalance: numeric('savingsBalance').notNull().default('0'),
+  totalReceived: numeric('totalReceived').notNull().default('0'),
+  totalSent: numeric('totalSent').notNull().default('0'),
+  monthlyPoints: numeric('monthlyPoints').notNull().default('0'),
   participationCount: integer('participationCount').notNull().default(0),
   createdAt: timestamp('createdAt').notNull().defaultNow(),
   updatedAt: timestamp('updatedAt').notNull().defaultNow(),
@@ -76,10 +83,11 @@ export const profile = pgTable('profile', {
 export const transactions = pgTable('transactions', {
   id: serial('id').primaryKey(),
   userId: text('userId').notNull(),
-  type: text('type').notNull(), // deposit | withdraw | send | receive | reward | airdrop
+  type: text('type').notNull(), // deposit | withdraw | send | receive | reward | airdrop | transfer
   amount: numeric('amount').notNull(),
   category: text('category'),
   counterparty: text('counterparty'),
+  counterpartyId: text('counterpartyId'),
   memo: text('memo'),
   jarId: integer('jarId'),
   createdAt: timestamp('createdAt').notNull().defaultNow(),
@@ -118,9 +126,48 @@ export const rewards = pgTable('rewards', {
 export const notifications = pgTable('notifications', {
   id: serial('id').primaryKey(),
   userId: text('userId').notNull(),
-  type: text('type').notNull(), // deposit | withdraw | reward | airdrop
+  type: text('type').notNull(), // deposit | withdraw | reward | airdrop | transfer | points
   title: text('title').notNull(),
   message: text('message'),
   isRead: boolean('isRead').notNull().default(false),
+  createdAt: timestamp('createdAt').notNull().defaultNow(),
+})
+
+// ── INMU Points system ──
+export const points = pgTable('points', {
+  id: serial('id').primaryKey(),
+  userId: text('userId').notNull(),
+  amount: numeric('amount').notNull().default('0'),
+  type: text('type').notNull(), // daily_login | inmuday | admin | reward
+  source: text('source'),
+  month: text('month').notNull(), // YYYY-MM format
+  createdAt: timestamp('createdAt').notNull().defaultNow(),
+})
+
+export const loginStreaks = pgTable('loginStreaks', {
+  userId: text('userId').primaryKey(),
+  lastLogin: timestamp('lastLogin').notNull().defaultNow(),
+  streak: integer('streak').notNull().default(0),
+  updatedAt: timestamp('updatedAt').notNull().defaultNow(),
+})
+
+// ── Admin audit log ──
+export const auditLog = pgTable('auditLog', {
+  id: serial('id').primaryKey(),
+  adminId: text('adminId').notNull(),
+  action: text('action').notNull(),
+  targetUserId: text('targetUserId'),
+  details: jsonb('details'),
+  createdAt: timestamp('createdAt').notNull().defaultNow(),
+})
+
+// ── Activity feed ──
+export const activityFeed = pgTable('activityFeed', {
+  id: serial('id').primaryKey(),
+  type: text('type').notNull(),
+  userId: text('userId'),
+  targetUserId: text('targetUserId'),
+  amount: numeric('amount'),
+  message: text('message'),
   createdAt: timestamp('createdAt').notNull().defaultNow(),
 })

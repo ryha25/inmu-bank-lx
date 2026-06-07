@@ -19,6 +19,8 @@ export const dict = {
     nav_profile: 'プロフィール',
     nav_admin: '管理画面',
     nav_signout: 'ログアウト',
+    nav_points: 'ポイント',
+    nav_savings: '貯蓄',
     // auth
     signin: 'ログイン',
     signup: '新規登録',
@@ -40,6 +42,8 @@ export const dict = {
     recent_history: '最近の履歴',
     view_all: 'すべて見る',
     no_data: 'データがありません',
+    total_holding: '合計持有',
+    monthly_points: '今月のポイント',
     // history / types
     date: '日時',
     type: '種類',
@@ -57,6 +61,11 @@ export const dict = {
     type_receive: '受取',
     type_reward: '報酬',
     type_airdrop: 'エアドロップ',
+    // savings
+    savings_title: '貯蓄',
+    move_to_savings: '貯蓄に移動',
+    move_from_savings: '貯蓄から引き出し',
+    savings_history: '貯蓄履歴',
     // jars
     jars_title: '貯金箱',
     create_jar: '貯金箱を作成',
@@ -104,6 +113,15 @@ export const dict = {
     user: 'ユーザー',
     total_holding: '総保有量',
     participations: '参加回数',
+    // points
+    points_title: 'ポイント',
+    claim_daily: '今日のログインボーナス',
+    daily_login_bonus: 'ログインボーナス',
+    points_leaderboard: 'ポイントランキング',
+    points_history: 'ポイント履歴',
+    already_claimed: '今日は受領済みです',
+    inmuday_bonus: 'INMUの日 ボーナス',
+    streak_bonus: 'ストリークボーナス',
     // notifications
     notifications_title: '通知',
     mark_all_read: 'すべて既読',
@@ -112,6 +130,7 @@ export const dict = {
     profile_title: 'プロフィール',
     x_id: 'X ID',
     discord_id: 'Discord ID',
+    discord_username: 'Discord ユーザー名',
     sol_wallet: 'SOL ウォレット',
     registered_at: '登録日',
     save: '保存',
@@ -142,6 +161,11 @@ export const dict = {
     reset_confirm_desc: 'この操作は取り消せません。',
     cancel: 'キャンセル',
     confirm: '実行する',
+    // transfers
+    send_inmu: 'INMU 送金',
+    recipient: '送り先',
+    send_amount: '送金額',
+    send: '送金',
     // common
     loading: '読み込み中…',
     create: '作成',
@@ -150,10 +174,12 @@ export const dict = {
     success: '完了しました',
     error: 'エラーが発生しました',
     units: '枚',
+    balance: '残高',
   },
   en: {
     appName: 'INMU Bank',
     tagline: 'Community INMU management service',
+    // nav
     nav_dashboard: 'Dashboard',
     nav_balance: 'Balance',
     nav_history: 'History',
@@ -168,6 +194,9 @@ export const dict = {
     nav_profile: 'Profile',
     nav_admin: 'Admin',
     nav_signout: 'Sign out',
+    nav_points: 'Points',
+    nav_savings: 'Savings',
+    // auth
     signin: 'Sign in',
     signup: 'Sign up',
     email: 'Email',
@@ -178,6 +207,7 @@ export const dict = {
     demo_notice: 'Demo auth (X / Discord coming soon)',
     have_account: 'Already have an account?',
     no_account: "Don't have an account?",
+    // dashboard
     current_balance: 'Current INMU Balance',
     monthly_change: 'This Month',
     total_received: 'Total Received',
@@ -187,6 +217,9 @@ export const dict = {
     recent_history: 'Recent Activity',
     view_all: 'View all',
     no_data: 'No data',
+    total_holding: 'Total Holdings',
+    monthly_points: 'Monthly Points',
+    // history / types
     date: 'Date',
     type: 'Type',
     amount: 'Amount',
@@ -203,6 +236,12 @@ export const dict = {
     type_receive: 'Receive',
     type_reward: 'Reward',
     type_airdrop: 'Airdrop',
+    // savings
+    savings_title: 'Savings',
+    move_to_savings: 'Move to Savings',
+    move_from_savings: 'Withdraw from Savings',
+    savings_history: 'Savings History',
+    // jars
     jars_title: 'Savings Jars',
     create_jar: 'Create jar',
     jar_name: 'Jar name',
@@ -218,6 +257,7 @@ export const dict = {
     cannot_withdraw_locked: 'Cannot withdraw while locked',
     deposit_to_jar: 'Deposit',
     withdraw_from_jar: 'Withdraw',
+    // goals
     goals_title: 'Savings Goals',
     create_goal: 'Create goal',
     goal_name: 'Goal name',
@@ -225,37 +265,54 @@ export const dict = {
     current_amount: 'Current',
     achievement: 'Progress',
     add_progress: 'Add',
+    // rewards
     rewards_title: 'Rewards',
     reward_810day: '810Day Reward',
     reward_inmuday: 'INMU Day Reward',
     reward_campaign: 'Campaign Reward',
     reward_airdrop: 'Airdrop',
     reward_total: 'Total Rewards',
+    // airdrops
     airdrops_title: 'Airdrops',
     received_airdrops: 'Received',
     distributed_airdrops: 'Distributed',
+    // community
     community_title: 'Community',
     total_participations: 'Total Participations',
     total_receives: 'Total Receives',
     total_received_inmu: 'Total Received INMU',
     your_rank: 'Your Rank',
+    // ranking
     ranking_title: 'Ranking',
     rank: 'Rank',
     user: 'User',
     total_holding: 'Total Holdings',
     participations: 'Participations',
+    // points
+    points_title: 'Points',
+    claim_daily: 'Claim Daily Login',
+    daily_login_bonus: 'Daily Login Bonus',
+    points_leaderboard: 'Points Leaderboard',
+    points_history: 'Points History',
+    already_claimed: 'Already claimed today',
+    inmuday_bonus: 'INMU Day Bonus',
+    streak_bonus: 'Streak Bonus',
+    // notifications
     notifications_title: 'Notifications',
     mark_all_read: 'Mark all read',
     no_notifications: 'No notifications',
+    // profile
     profile_title: 'Profile',
     x_id: 'X ID',
     discord_id: 'Discord ID',
+    discord_username: 'Discord Username',
     sol_wallet: 'SOL Wallet',
     registered_at: 'Registered',
     save: 'Save',
     wallet_private: 'SOL address is private (visible to you and admins only)',
     show: 'Show',
     hide: 'Hide',
+    // admin
     admin_title: 'Admin Panel',
     admin_only: 'Administrators only',
     change_balance: 'Change Balance',
@@ -269,6 +326,7 @@ export const dict = {
     new_balance: 'New balance',
     reason: 'Reason',
     apply: 'Apply',
+    // reset
     reset_title: 'Reset',
     reset_user: 'Reset user',
     reset_balance: 'Reset balance',
@@ -278,6 +336,12 @@ export const dict = {
     reset_confirm_desc: 'This action cannot be undone.',
     cancel: 'Cancel',
     confirm: 'Confirm',
+    // transfers
+    send_inmu: 'Send INMU',
+    recipient: 'Recipient',
+    send_amount: 'Amount',
+    send: 'Send',
+    // common
     loading: 'Loading…',
     create: 'Create',
     delete: 'Delete',
@@ -285,6 +349,7 @@ export const dict = {
     success: 'Done',
     error: 'An error occurred',
     units: '',
+    balance: 'Balance',
   },
 } as const
 
