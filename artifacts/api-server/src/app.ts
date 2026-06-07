@@ -27,19 +27,28 @@ app.use(
     },
   }),
 );
-const allowedOrigins = process.env.ALLOWED_ORIGINS
+const explicitOrigins = process.env.ALLOWED_ORIGINS
   ? process.env.ALLOWED_ORIGINS.split(",").map((o) => o.trim())
-  : ["http://localhost:5173", "http://localhost:3000"];
+  : [];
+
+function isOriginAllowed(origin: string): boolean {
+  if (explicitOrigins.length > 0) return explicitOrigins.includes(origin);
+  return (
+    /^https:\/\/[a-zA-Z0-9-]+\.replit\.dev$/.test(origin) ||
+    /^https:\/\/[a-zA-Z0-9-]+\.repl\.co$/.test(origin) ||
+    origin === "http://localhost:5173" ||
+    origin === "http://localhost:3000"
+  );
+}
 
 app.use(
   cors({
     origin: (origin, callback) => {
-      if (!origin) { callback(null, false); return; }
-      if (allowedOrigins.includes(origin)) {
+      if (!origin) {
         callback(null, true);
-      } else {
-        callback(new Error("Not allowed by CORS"));
+        return;
       }
+      callback(null, isOriginAllowed(origin));
     },
     credentials: true,
   }),
