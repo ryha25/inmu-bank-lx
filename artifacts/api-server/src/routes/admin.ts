@@ -67,7 +67,8 @@ router.get("/admin/wallet", requireAdmin, async (_req, res): Promise<void> => {
     res.json({ wallet: (r.rows[0]?.value as string | undefined) ?? null });
   } catch (e) {
     console.error("[Admin] get wallet error:", e);
-    res.json({ wallet: null });
+    // DBエラーは5xxで返す。null(=未接続)と障害をクライアントが区別できるようにする
+    res.status(500).json({ error: "Internal error" });
   }
 });
 
