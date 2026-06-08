@@ -27,6 +27,7 @@ import {
   createTransferInstruction,
   getAccount,
   createAssociatedTokenAccountInstruction,
+  TOKEN_2022_PROGRAM_ID,
 } from '@solana/spl-token'
 
 const INMU_MINT = new PublicKey('4FDtAagigMuFcPp36rbd9bzcYTJgQah2qLMYcYtfpump')
@@ -261,23 +262,24 @@ export function AdminProfilePage() {
       const fromPubkey = new PublicKey(savedWallet)
       const toPubkey = new PublicKey(sendTarget.solWallet)
 
-      const fromATA = await getAssociatedTokenAddress(INMU_MINT, fromPubkey)
-      const toATA = await getAssociatedTokenAddress(INMU_MINT, toPubkey)
+      // INMU は Token-2022 トークン: 全命令に TOKEN_2022_PROGRAM_ID を指定
+      const fromATA = await getAssociatedTokenAddress(INMU_MINT, fromPubkey, false, TOKEN_2022_PROGRAM_ID)
+      const toATA = await getAssociatedTokenAddress(INMU_MINT, toPubkey, false, TOKEN_2022_PROGRAM_ID)
 
       const instructions = []
 
       // 受信者のATAが存在しない場合は作成
       try {
-        await getAccount(connection, toATA)
+        await getAccount(connection, toATA, 'confirmed', TOKEN_2022_PROGRAM_ID)
       } catch {
         instructions.push(
-          createAssociatedTokenAccountInstruction(fromPubkey, toATA, toPubkey, INMU_MINT)
+          createAssociatedTokenAccountInstruction(fromPubkey, toATA, toPubkey, INMU_MINT, TOKEN_2022_PROGRAM_ID)
         )
       }
 
       const rawAmount = Math.floor(amount * Math.pow(10, INMU_DECIMALS))
       instructions.push(
-        createTransferInstruction(fromATA, toATA, fromPubkey, rawAmount)
+        createTransferInstruction(fromATA, toATA, fromPubkey, rawAmount, [], TOKEN_2022_PROGRAM_ID)
       )
 
       const tx = new Transaction()
