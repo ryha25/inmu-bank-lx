@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { db } from "@workspace/db";
-import { profileTable } from "@workspace/db/schema";
+import { profileTable, loginStreaksTable } from "@workspace/db/schema";
 import { eq, sql } from "drizzle-orm";
 import { requireAuth } from "../middlewares/session";
 
@@ -27,12 +27,20 @@ router.get("/community", requireAuth, async (req, res): Promise<void> => {
       .sort((a, b) => Number(b.totalReceived) - Number(a.totalReceived));
     const rank = sorted.findIndex((p) => p.userId === userId) + 1;
 
+    const streak = await db
+      .select()
+      .from(loginStreaksTable)
+      .where(eq(loginStreaksTable.userId, userId))
+      .then((r) => r[0]);
+
     res.json({
       participations: profile.participationCount,
       receiveCount: profile.participationCount,
       totalReceivedInmu: Number(profile.totalReceived),
       rank,
       totalUsers,
+      monthlyPoints: Number(profile.monthlyPoints),
+      loginStreak: streak?.streak ?? 0,
     });
   } catch {
     res.status(500).json({ error: "Internal error" });

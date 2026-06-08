@@ -7,8 +7,7 @@ import { AuthForm } from "@/components/auth-form";
 import { DashboardPage } from "@/pages/dashboard-page";
 import { HistoryPage } from "@/pages/history-page";
 import { BalancePage } from "@/pages/balance-page";
-import { CommunityPage } from "@/pages/community-page";
-import { RankingPage } from "@/pages/ranking-page";
+import { AchievementsPage } from "@/pages/achievements-page";
 import { NotificationsPage } from "@/pages/notifications-page";
 import { ProfilePage } from "@/pages/profile-page";
 import { PointsPage } from "@/pages/points-page";
@@ -23,8 +22,13 @@ function Router() {
       <Route path="/" component={DashboardPage} />
       <Route path="/balance" component={BalancePage} />
       <Route path="/history" component={HistoryPage} />
-      <Route path="/community" component={CommunityPage} />
-      <Route path="/ranking" component={RankingPage} />
+      <Route path="/achievements" component={AchievementsPage} />
+      <Route path="/community">
+        <Redirect to="/achievements" />
+      </Route>
+      <Route path="/ranking">
+        <Redirect to="/achievements" />
+      </Route>
       <Route path="/notifications" component={NotificationsPage} />
       <Route path="/profile" component={ProfilePage} />
       <Route path="/points" component={PointsPage} />

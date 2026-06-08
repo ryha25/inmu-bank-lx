@@ -4,9 +4,8 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { useI18n } from '@/lib/i18n/context'
 import { formatInmu } from '@/lib/format'
-import { fetchInmuTokenBalance } from '@/lib/solana'
 import { toast } from 'sonner'
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { Link, useLocation } from 'wouter'
 import {
   User, Wallet, Coins, TrendingUp, TrendingDown, Award,
@@ -68,7 +67,6 @@ type SecondaryLink = {
   href: string
   label: string
   icon: React.ElementType
-  adminOnly?: boolean
 }
 
 export function ProfileView({
@@ -84,8 +82,6 @@ export function ProfileView({
   const [, navigate] = useLocation()
   const [loading, setLoading] = useState(false)
   const [phantomLoading, setPhantomLoading] = useState(false)
-  const [inmuOnChain, setInmuOnChain] = useState<number | null>(null)
-  const [inmuFetching, setInmuFetching] = useState(false)
   const [form, setForm] = useState({
     displayName: profile.displayName || '',
     xId: profile.xId || '',
@@ -93,19 +89,6 @@ export function ProfileView({
     discordUsername: profile.discordUsername || '',
     solWallet: profile.solWallet || '',
   })
-
-  // Auto-fetch INMU on-chain balance when wallet is connected
-  useEffect(() => {
-    if (!form.solWallet) {
-      setInmuOnChain(null)
-      return
-    }
-    setInmuFetching(true)
-    fetchInmuTokenBalance(form.solWallet)
-      .then(bal => setInmuOnChain(bal))
-      .catch(() => setInmuOnChain(null))
-      .finally(() => setInmuFetching(false))
-  }, [form.solWallet])
 
   async function handleSave() {
     setLoading(true)
@@ -138,7 +121,7 @@ export function ProfileView({
 
   async function handleLogout() {
     try {
-      await fetch('/api/sign-out', { method: 'POST', credentials: 'include' })
+      await fetch('/api/auth/sign-out', { method: 'POST', credentials: 'include' })
     } catch {
       // ignore — clear cookie regardless
     }
@@ -150,7 +133,6 @@ export function ProfileView({
     try {
       const provider = getPhantomProvider()
 
-      // Inside Phantom browser — connect directly
       if (provider?.isPhantom) {
         const resp = await provider.connect()
         const address = resp.publicKey.toString()
@@ -161,7 +143,6 @@ export function ProfileView({
         return
       }
 
-      // Mobile: deep-link into Phantom's built-in browser
       if (isMobile()) {
         const currentUrl = encodeURIComponent(window.location.href)
         const ref = encodeURIComponent(window.location.origin)
@@ -176,7 +157,6 @@ export function ProfileView({
         return
       }
 
-      // Desktop without extension
       toast.error(t('phantom_not_installed'))
       window.open('https://phantom.app/', '_blank')
     } catch (e: unknown) {
@@ -197,7 +177,6 @@ export function ProfileView({
       }
       await saveWallet(null)
       setForm(f => ({ ...f, solWallet: '' }))
-      setInmuOnChain(null)
       toast.success('Phantom を切断しました')
       onRefresh()
     } catch (e) {
@@ -210,10 +189,8 @@ export function ProfileView({
   const secondaryLinks: SecondaryLink[] = [
     { href: '/notifications', label: t('nav_notifications'), icon: Bell },
     { href: '/points',        label: t('nav_points'),        icon: Star },
-    { href: '/admin',         label: t('nav_admin'),         icon: Shield, adminOnly: true },
+    { href: '/admin',         label: t('nav_admin'),         icon: Shield },
   ]
-
-  const visibleLinks = secondaryLinks.filter(l => !l.adminOnly || isAdmin)
 
   return (
     <div className="flex flex-col gap-4">
@@ -258,30 +235,28 @@ export function ProfileView({
       </Card>
 
       {/* ── Secondary nav links ── */}
-      {visibleLinks.length > 0 && (
-        <Card className="border-border bg-card overflow-hidden">
-          <div className="px-4 py-3 border-b border-border">
-            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">その他の機能</p>
-          </div>
-          <ul>
-            {visibleLinks.map((link, i) => {
-              const Icon = link.icon
-              return (
-                <li key={link.href} className={i > 0 ? 'border-t border-border' : ''}>
-                  <Link
-                    href={link.href}
-                    className="flex min-h-[52px] items-center gap-3 px-4 text-sm font-medium text-foreground transition-colors hover:bg-secondary active:bg-secondary"
-                  >
-                    <Icon className="size-[18px] shrink-0 text-muted-foreground" />
-                    <span className="flex-1">{link.label}</span>
-                    <ChevronRight className="size-4 text-muted-foreground" />
-                  </Link>
-                </li>
-              )
-            })}
-          </ul>
-        </Card>
-      )}
+      <Card className="border-border bg-card overflow-hidden">
+        <div className="px-4 py-3 border-b border-border">
+          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">その他の機能</p>
+        </div>
+        <ul>
+          {secondaryLinks.map((link, i) => {
+            const Icon = link.icon
+            return (
+              <li key={link.href} className={i > 0 ? 'border-t border-border' : ''}>
+                <Link
+                  href={link.href}
+                  className="flex min-h-[52px] items-center gap-3 px-4 text-sm font-medium text-foreground transition-colors hover:bg-secondary active:bg-secondary"
+                >
+                  <Icon className="size-[18px] shrink-0 text-muted-foreground" />
+                  <span className="flex-1">{link.label}</span>
+                  <ChevronRight className="size-4 text-muted-foreground" />
+                </Link>
+              </li>
+            )
+          })}
+        </ul>
+      </Card>
 
       {/* ── Phantom Wallet ── */}
       <Card className="border-border bg-card p-4">
@@ -305,23 +280,8 @@ export function ProfileView({
         {form.solWallet ? (
           <div className="flex flex-col gap-2">
             <p className="font-mono text-xs text-muted-foreground break-all bg-secondary/30 rounded p-2">
-              {form.solWallet}
+              {form.solWallet.slice(0, 6)}…{form.solWallet.slice(-6)}
             </p>
-
-            {/* INMU on-chain balance — no SOL */}
-            <div className="rounded-lg bg-primary/5 border border-primary/20 px-3 py-2">
-              <p className="text-[11px] font-medium text-muted-foreground mb-1">{t('inmu_wallet_balance')}</p>
-              {inmuFetching ? (
-                <p className="font-mono text-sm text-muted-foreground animate-pulse">{t('inmu_wallet_fetching')}</p>
-              ) : inmuOnChain !== null ? (
-                <p className="font-mono text-lg font-bold gold-text tabular-nums">
-                  {inmuOnChain.toLocaleString()} <span className="text-sm font-normal text-muted-foreground">INMU</span>
-                </p>
-              ) : (
-                <p className="text-xs text-muted-foreground">{t('inmu_wallet_not_set')}</p>
-              )}
-            </div>
-
             <p className="text-[11px] text-muted-foreground">{t('wallet_private')}</p>
             <div className="flex gap-2">
               <Button

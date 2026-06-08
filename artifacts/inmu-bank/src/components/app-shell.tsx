@@ -6,22 +6,20 @@ import type { TranslationKey } from '@/lib/i18n/dict'
 import { cn } from '@/lib/utils'
 import {
   Bell, Coins, History, LayoutDashboard,
-  LogOut, Shield, Star, Trophy, User as UserIcon, Users,
+  LogOut, Medal, Star, User as UserIcon,
 } from 'lucide-react'
 import { Link, useLocation } from 'wouter'
 
-type NavItem = { href: string; key: TranslationKey; icon: React.ElementType; adminOnly?: boolean }
+type NavItem = { href: string; key: TranslationKey; icon: React.ElementType }
 
 const ALL_NAV: NavItem[] = [
   { href: '/',              key: 'nav_dashboard',     icon: LayoutDashboard },
   { href: '/balance',       key: 'nav_balance',       icon: Coins },
   { href: '/history',       key: 'nav_history',       icon: History },
   { href: '/points',        key: 'nav_points',        icon: Star },
-  { href: '/ranking',       key: 'nav_ranking',       icon: Trophy },
+  { href: '/achievements',  key: 'nav_achievements',  icon: Medal },
   { href: '/notifications', key: 'nav_notifications', icon: Bell },
-  { href: '/community',     key: 'nav_community',     icon: Users },
   { href: '/profile',       key: 'nav_profile',       icon: UserIcon },
-  { href: '/admin',         key: 'nav_admin',         icon: Shield, adminOnly: true },
 ]
 
 export function AppShell({
@@ -38,8 +36,6 @@ export function AppShell({
   const { t } = useI18n()
   const [location, navigate] = useLocation()
 
-  const visibleNav = ALL_NAV.filter((item) => !item.adminOnly || isAdmin)
-
   async function handleSignOut() {
     await signOut()
     navigate('/sign-in')
@@ -54,11 +50,11 @@ export function AppShell({
       <aside className="fixed inset-y-0 left-0 z-40 hidden w-60 flex-col border-r border-border bg-sidebar lg:flex">
         <div className="flex h-16 items-center gap-2 border-b border-border px-5">
           <Logo size={32} />
-          <span className="font-bold tracking-tight gold-text">INMU Bank</span>
+          <span className="font-bold tracking-tight gold-text">INMU PORTAL</span>
         </div>
         <nav className="flex-1 overflow-y-auto px-3 py-4">
           <ul className="flex flex-col gap-0.5">
-            {visibleNav.map((item) => {
+            {ALL_NAV.map((item) => {
               const Icon = item.icon
               const active = isActive(item.href)
               return (
@@ -103,7 +99,7 @@ export function AppShell({
         <header className="sticky top-0 z-30 flex h-14 items-center justify-between border-b border-border bg-background/90 px-4 backdrop-blur-md lg:px-8">
           <div className="flex items-center gap-2 lg:hidden">
             <Logo size={26} />
-            <span className="font-bold tracking-tight gold-text text-sm">INMU Bank</span>
+            <span className="font-bold tracking-tight gold-text text-sm">INMU PORTAL</span>
           </div>
           <div className="hidden lg:block">
             <p className="text-sm text-muted-foreground">{t('tagline')}</p>
@@ -122,7 +118,7 @@ export function AppShell({
       {/* ── Mobile scrollable bottom tab bar ── */}
       <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-border bg-background/98 backdrop-blur-md lg:hidden">
         <ul className="flex items-stretch overflow-x-auto scrollbar-none">
-          {visibleNav.map((item) => {
+          {ALL_NAV.map((item) => {
             const Icon = item.icon
             const active = isActive(item.href)
             return (

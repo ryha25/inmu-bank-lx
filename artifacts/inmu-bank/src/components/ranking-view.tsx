@@ -7,11 +7,6 @@ import { Trophy, Star } from 'lucide-react'
 type InmuRow   = { rank: number; userId: string; displayName: string; balance: number; totalReceived: number; participations: number }
 type PointsRow = { rank: number; userId: string; displayName: string; points: number; participations: number }
 
-function maskName(name: string) {
-  if (name.length <= 2) return name
-  return name[0] + '*'.repeat(name.length - 2) + name[name.length - 1]
-}
-
 function RankBadge({ rank }: { rank: number }) {
   return (
     <div className={`flex size-8 shrink-0 items-center justify-center rounded-full font-bold ${
@@ -56,7 +51,7 @@ export function RankingView({
             <div className="flex items-center gap-3">
               <RankBadge rank={r.rank} />
               <div className="min-w-0 flex-1">
-                <p className="truncate font-medium text-sm">{maskName(r.displayName)}</p>
+                <p className="truncate font-medium text-sm">{r.displayName}</p>
                 <p className="text-xs text-muted-foreground">{t('participations')}: {r.participations}</p>
               </div>
               <div className="text-right">
@@ -77,7 +72,7 @@ export function RankingView({
             <div className="flex items-center gap-3">
               <RankBadge rank={r.rank} />
               <div className="min-w-0 flex-1">
-                <p className="truncate font-medium text-sm">{maskName(r.displayName)}</p>
+                <p className="truncate font-medium text-sm">{r.displayName}</p>
                 <p className="text-xs text-muted-foreground">{t('participations')}: {r.participations}</p>
               </div>
               <div className="text-right">

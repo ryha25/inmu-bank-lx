@@ -44,7 +44,7 @@ export function AuthForm({ mode }: { mode: 'sign-in' | 'sign-up' }) {
       <div className="w-full max-w-sm">
         <div className="mb-8 flex flex-col items-center text-center">
           <Logo size={56} />
-          <h1 className="mt-4 text-2xl font-bold tracking-tight gold-text">INMU Bank</h1>
+          <h1 className="mt-4 text-2xl font-bold tracking-tight gold-text">INMU PORTAL</h1>
           <p className="mt-1 text-sm text-muted-foreground">{t('tagline')}</p>
         </div>
 
