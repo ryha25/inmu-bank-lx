@@ -122,15 +122,19 @@ export function AdminProfilePage() {
     void (async () => {
       let wallet = localStored
       // サーバー保存値を取得（管理者セッションがあればブラウザを問わず取得可能）
+      // 取得成功時はサーバーを権威とする: 別ブラウザで切断(null)されたら
+      // ローカルキャッシュも消し、全ブラウザで切断状態を同期する。
       try {
         const res = await fetch('/api/admin/wallet', { credentials: 'include' })
         if (res.ok) {
           const d = await res.json() as { wallet: string | null }
-          if (d.wallet) {
-            wallet = d.wallet
-            try { localStorage.setItem(ADMIN_WALLET_KEY, d.wallet) } catch {}
-          }
+          wallet = d.wallet  // サーバーが権威 (null の可能性あり)
+          try {
+            if (d.wallet) localStorage.setItem(ADMIN_WALLET_KEY, d.wallet)
+            else localStorage.removeItem(ADMIN_WALLET_KEY)
+          } catch {}
         }
+        // res.ok でない(5xx等)場合はローカルキャッシュを維持
       } catch { /* サーバー未到達時は localStorage を使用 */ }
 
       if (wallet) {
