@@ -8,7 +8,30 @@ INMUコミュニティ向けの内部バンキングアプリ。INMU残高管理
 
 | Tag | Commit | 内容 |
 |-----|--------|------|
+| `INMU-BANK-v1.1` | `416749ba0f01458ffc9b7b9dcefef6a0d41b2a71` | ランキング2タブ・ログアウト・Phantom INMU残高 |
 | `INMU-BANK-v1.0` | `6a2d685ca908c0ddc2b00444564a42f732dc8afc` | 初回安定版リリース |
+
+---
+
+### INMU-BANK-v1.1 — 最新安定版
+
+```
+Stable Version: INMU-BANK-v1.1
+Commit:         416749ba0f01458ffc9b7b9dcefef6a0d41b2a71
+```
+
+**変更内容:**
+- ランキング 2タブ構成（INMU保有 / ポイント）
+- プロフィール画面にログアウトボタン追加
+- Phantom Wallet 接続後に INMU トークン残高のみ取得・表示
+- 管理画面 管理コード認証ゲート確認済み
+
+**この Commit から復元する方法:**
+```bash
+git checkout -b restore-v1.1 416749ba0f01458ffc9b7b9dcefef6a0d41b2a71
+```
+
+---
 
 ### INMU-BANK-v1.0 — 初回安定版
 
@@ -19,11 +42,7 @@ Commit:         6a2d685ca908c0ddc2b00444564a42f732dc8afc
 
 **この Commit から復元する方法:**
 ```bash
-# ブランチを作成して復元
 git checkout -b restore-v1.0 6a2d685ca908c0ddc2b00444564a42f732dc8afc
-
-# またはタグから復元（タグ作成後）
-git checkout INMU-BANK-v1.0
 ```
 
 ---
@@ -51,6 +70,9 @@ pnpm run build
 | `DATABASE_URL` | PostgreSQL接続文字列 | — |
 | `SESSION_SECRET` | HMACセッション署名キー | — |
 | `ADMIN_CODE` | 管理画面認証コード | `0000` |
+| `VITE_INMU_TOKEN_MINT` | INMUトークンのSPLミントアドレス（Phantom残高取得に必須） | 未設定（残高0表示） |
+| `VITE_SOLANA_RPC` | Solana RPC エンドポイント | `https://api.mainnet-beta.solana.com` |
+| `VITE_INMU_TOKEN_DECIMALS` | INMUトークンのdecimal数 | `6` |
 
 ### テストアカウント
 
@@ -98,7 +120,7 @@ pnpm run build
 - **残高管理**: 通常残高/貯蓄/ロック残高、30/90/180/365日ロック
 - **入出金履歴**: 全トランザクション一覧・フィルター
 - **ポイント**: 月次ポイント・履歴
-- **ランキング**: INMUランキング（ポイントタブは未実装）
+- **ランキング**: INMU保有ランキング / ポイントランキング（2タブ）
 - **通知**: プッシュ通知・既読管理
 - **コミュニティ**: 参加統計・順位
 - **プロフィール**: X/Discord/SOLウォレット設定、Phantom接続
