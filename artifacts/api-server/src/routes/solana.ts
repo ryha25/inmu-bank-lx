@@ -6,31 +6,50 @@ const router = Router();
 const INMU_TOKEN_MINT = "4FDtAagigMuFcPp36rbd9bzcYTJgQah2qLMYcYtfpump";
 const INMU_DECIMALS = 6;
 
-async function fetchInmuBalance(wallet: string): Promise<number> {
-  const rpcUrl = process.env.SOLANA_RPC ?? "https://api.mainnet-beta.solana.com";
+const RPC_ENDPOINTS = [
+  "https://rpc.ankr.com/solana",
+  "https://solana-mainnet.g.alchemy.com/v2/demo",
+  "https://api.mainnet-beta.solana.com",
+];
 
-  const response = await fetch(rpcUrl, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      jsonrpc: "2.0",
-      id: 1,
-      method: "getTokenAccountsByOwner",
-      params: [
-        wallet,
-        { mint: INMU_TOKEN_MINT },
-        { encoding: "jsonParsed" },
-      ],
-    }),
+async function rpcFetch(body: unknown): Promise<Response> {
+  const customRpc = process.env.SOLANA_RPC;
+  const endpoints = customRpc ? [customRpc, ...RPC_ENDPOINTS] : RPC_ENDPOINTS;
+
+  let lastErr: Error = new Error("No RPC endpoint available");
+  for (const url of endpoints) {
+    try {
+      const res = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+        signal: AbortSignal.timeout(8000),
+      });
+      if (res.ok) return res;
+      const text = await res.text().catch(() => "");
+      console.warn(`[Solana] RPC ${url} returned ${res.status}: ${text.slice(0, 100)}`);
+      lastErr = new Error(`RPC ${url} error ${res.status}`);
+    } catch (e) {
+      console.warn(`[Solana] RPC ${url} failed:`, e);
+      lastErr = e instanceof Error ? e : new Error(String(e));
+    }
+  }
+  throw lastErr;
+}
+
+async function fetchInmuBalance(wallet: string): Promise<number> {
+  const res = await rpcFetch({
+    jsonrpc: "2.0",
+    id: 1,
+    method: "getTokenAccountsByOwner",
+    params: [
+      wallet,
+      { mint: INMU_TOKEN_MINT },
+      { encoding: "jsonParsed" },
+    ],
   });
 
-  if (!response.ok) {
-    const text = await response.text().catch(() => "");
-    console.error(`[Solana] RPC HTTP error: ${response.status} ${response.statusText} — ${text}`);
-    throw new Error(`RPC error: ${response.status}`);
-  }
-
-  const data = await response.json() as {
+  const data = await res.json() as {
     result?: {
       value?: Array<{
         account: {
@@ -66,6 +85,19 @@ async function fetchInmuBalance(wallet: string): Promise<number> {
 
   return totalRaw / Math.pow(10, INMU_DECIMALS);
 }
+
+// ── RPC プロキシ (フロントエンドからの Solana JSON-RPC を中継) ──
+// 秘密鍵不要。blockhash取得・トランザクション送信のみ対応。
+router.post("/solana/rpc-proxy", async (req, res): Promise<void> => {
+  try {
+    const rpcRes = await rpcFetch(req.body);
+    const data = await rpcRes.json();
+    res.json(data);
+  } catch (e) {
+    console.error("[Solana/Proxy] RPC proxy error:", e);
+    res.status(502).json({ error: "RPC proxy error", message: e instanceof Error ? e.message : String(e) });
+  }
+});
 
 // ── ユーザー用: INMU残高取得 ──
 router.get("/solana/inmu-balance", requireAuth, async (req, res): Promise<void> => {
