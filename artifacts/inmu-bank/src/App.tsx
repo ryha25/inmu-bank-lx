@@ -7,11 +7,6 @@ import { AuthForm } from "@/components/auth-form";
 import { DashboardPage } from "@/pages/dashboard-page";
 import { HistoryPage } from "@/pages/history-page";
 import { BalancePage } from "@/pages/balance-page";
-import { TransfersPage } from "@/pages/transfers-page";
-import { JarsPage } from "@/pages/jars-page";
-import { GoalsPage } from "@/pages/goals-page";
-import { RewardsPage } from "@/pages/rewards-page";
-import { AirdropsPage } from "@/pages/airdrops-page";
 import { CommunityPage } from "@/pages/community-page";
 import { RankingPage } from "@/pages/ranking-page";
 import { NotificationsPage } from "@/pages/notifications-page";
@@ -28,11 +23,6 @@ function Router() {
       <Route path="/" component={DashboardPage} />
       <Route path="/balance" component={BalancePage} />
       <Route path="/history" component={HistoryPage} />
-      <Route path="/transfers" component={TransfersPage} />
-      <Route path="/jars" component={JarsPage} />
-      <Route path="/goals" component={GoalsPage} />
-      <Route path="/rewards" component={RewardsPage} />
-      <Route path="/airdrops" component={AirdropsPage} />
       <Route path="/community" component={CommunityPage} />
       <Route path="/ranking" component={RankingPage} />
       <Route path="/notifications" component={NotificationsPage} />
