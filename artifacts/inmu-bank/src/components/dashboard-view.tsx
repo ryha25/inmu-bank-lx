@@ -19,7 +19,7 @@ export function DashboardView({
   walletInmu?: number | null
 }) {
   const { t, locale } = useI18n()
-  const totalHoldings = data.balance + data.savingsBalance + data.jarTotal
+  const totalHoldings = data.balance + data.jarTotal
 
   return (
     <div className="flex flex-col gap-5">
@@ -79,19 +79,6 @@ export function DashboardView({
         <StatCard labelKey="jar_total" value={data.jarTotal} icon={PiggyBank} accent="teal" />
         <StatCard labelKey="goal_rate" value={Math.round(data.goalRate)} icon={Target} accent="gold" isInmu={false} suffix="%" />
       </div>
-
-      {data.savingsBalance > 0 && (
-        <Card className="border-border bg-card p-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <PiggyBank className="size-4 text-accent" />
-              <p className="text-sm font-medium text-muted-foreground">Savings Balance</p>
-            </div>
-            <Link href="/balance" className="text-xs font-medium text-primary hover:underline">{t('view_all')}</Link>
-          </div>
-          <p className="mt-2 font-mono text-xl font-bold tabular-nums">{formatInmu(data.savingsBalance)}</p>
-        </Card>
-      )}
 
       <Card className="border-border bg-card">
         <div className="flex items-center justify-between border-b border-border px-4 py-3">

@@ -9,6 +9,7 @@ import { useLocation } from 'wouter'
 import {
   User, WalletCards,
   ExternalLink, LogOut as WalletDisconnect, LogOut,
+  AtSign, MessageSquare,
 } from 'lucide-react'
 
 type ProfileData = {
@@ -74,6 +75,8 @@ export function ProfileView({
   const [loading, setLoading] = useState(false)
   const [phantomLoading, setPhantomLoading] = useState(false)
   const [displayName, setDisplayName] = useState(profile.displayName || '')
+  const [xId, setXId] = useState(profile.xId || '')
+  const [discordId, setDiscordId] = useState(profile.discordId || '')
   const [solWallet, setSolWallet] = useState(profile.solWallet || '')
 
   async function handleSave() {
@@ -83,7 +86,12 @@ export function ProfileView({
         method: 'PUT',
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ displayName, solWallet }),
+        body: JSON.stringify({
+          displayName,
+          xId: xId || null,
+          discordId: discordId || null,
+          solWallet,
+        }),
       })
       if (!res.ok) throw new Error('Failed to save')
       toast.success(t('success'))
@@ -174,21 +182,50 @@ export function ProfileView({
 
   return (
     <div className="flex flex-col gap-4">
-      {/* ── 表示名 ── */}
+      {/* ── プロフィール情報 ── */}
       <Card className="border-border bg-card p-4">
         <div className="flex items-center gap-2 mb-4">
           <User className="size-4 text-primary" />
           <h2 className="font-semibold">{t('profile_title')}</h2>
         </div>
         <div className="flex flex-col gap-3">
+          {/* 表示名 */}
           <div className="flex flex-col gap-1.5">
             <Label>{t('displayName')}</Label>
             <Input
               value={displayName}
               onChange={e => setDisplayName(e.target.value)}
               className="min-h-11"
+              placeholder="表示名"
             />
           </div>
+
+          {/* X ID */}
+          <div className="flex flex-col gap-1.5">
+            <Label className="flex items-center gap-1.5">
+              <AtSign className="size-3" /> X ID
+            </Label>
+            <Input
+              value={xId}
+              onChange={e => setXId(e.target.value)}
+              className="min-h-11"
+              placeholder="@handle"
+            />
+          </div>
+
+          {/* Discord ID */}
+          <div className="flex flex-col gap-1.5">
+            <Label className="flex items-center gap-1.5">
+              <MessageSquare className="size-3" /> Discord ID
+            </Label>
+            <Input
+              value={discordId}
+              onChange={e => setDiscordId(e.target.value)}
+              className="min-h-11"
+              placeholder="username または ID"
+            />
+          </div>
+
           <Button onClick={handleSave} disabled={loading} className="min-h-11">
             {t('save')}
           </Button>
@@ -219,11 +256,17 @@ export function ProfileView({
 
         {solWallet ? (
           <div className="flex flex-col gap-2">
+            {/* 接続状態 */}
+            <div className="flex items-center gap-2">
+              <span className="inline-flex size-2 rounded-full bg-green-500" />
+              <span className="text-xs font-medium text-green-600">接続中</span>
+            </div>
             {/* SOLアドレス短縮表示 */}
             <div className="rounded-md bg-secondary/50 p-2.5">
               <p className="text-[10px] text-muted-foreground mb-1">SOL アドレス</p>
-              <p className="font-mono text-xs text-foreground">
-                {solWallet.slice(0, 6)}…{solWallet.slice(-6)}
+              <p className="font-mono text-xs text-foreground break-all">{solWallet}</p>
+              <p className="font-mono text-xs text-muted-foreground mt-0.5">
+                ({solWallet.slice(0, 6)}…{solWallet.slice(-6)})
               </p>
             </div>
             <p className="text-[11px] text-muted-foreground">{t('wallet_private')}</p>

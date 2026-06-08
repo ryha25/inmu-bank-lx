@@ -8,7 +8,7 @@ import { useI18n } from '@/lib/i18n/context'
 import { useAuth } from '@/hooks/use-auth'
 import { formatInmu } from '@/lib/format'
 import { toast } from 'sonner'
-import { Coins, PiggyBank, Lock, Unlock, ArrowUpRight, ArrowDownLeft, CheckCircle2 } from 'lucide-react'
+import { Coins, Lock, Unlock, CheckCircle2 } from 'lucide-react'
 
 type BalanceData = {
   balance: number
@@ -48,10 +48,6 @@ export function BalancePage() {
   const [data, setData] = useState<BalanceData | null>(null)
   const [jars, setJars] = useState<JarRow[]>([])
   const [loading, setLoading] = useState(false)
-
-  // Savings controls
-  const [toSavings, setToSavings] = useState('')
-  const [fromSavings, setFromSavings] = useState('')
 
   // Lock controls
   const [lockAmount, setLockAmount] = useState('')
@@ -97,21 +93,14 @@ export function BalancePage() {
       ) : (
         <div className="flex flex-col gap-4">
 
-          {/* ── 3残高カード ── */}
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+          {/* ── 2残高カード ── */}
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <Card className="border-border bg-card p-4">
               <div className="flex items-center gap-2 mb-2">
                 <Coins className="size-4 text-primary" />
                 <p className="text-xs font-medium text-muted-foreground">通常残高</p>
               </div>
               <p className="font-mono text-2xl font-bold tabular-nums gold-text">{formatInmu(data.balance)}</p>
-            </Card>
-            <Card className="border-border bg-card p-4">
-              <div className="flex items-center gap-2 mb-2">
-                <PiggyBank className="size-4 text-accent" />
-                <p className="text-xs font-medium text-muted-foreground">{t('savings_title')}</p>
-              </div>
-              <p className="font-mono text-2xl font-bold tabular-nums">{formatInmu(data.savingsBalance)}</p>
             </Card>
             <Card className="border-border bg-card p-4">
               <div className="flex items-center gap-2 mb-2">
@@ -124,57 +113,6 @@ export function BalancePage() {
               )}
             </Card>
           </div>
-
-          {/* ── 貯蓄操作 ── */}
-          <Card className="border-border bg-card p-4">
-            <div className="flex items-center gap-2 mb-3">
-              <PiggyBank className="size-4 text-accent" />
-              <h3 className="font-semibold text-sm">{t('savings_title')}</h3>
-            </div>
-            <div className="flex flex-col gap-2">
-              <div className="flex gap-2">
-                <Input
-                  type="number"
-                  placeholder="数量 (INMU)"
-                  value={toSavings}
-                  onChange={e => setToSavings(e.target.value)}
-                  className="min-h-11 flex-1"
-                />
-                <Button
-                  onClick={() => withLoading(async () => {
-                    await api('/balance/move-to-savings', 'POST', { amount: Number(toSavings) })
-                    setToSavings('')
-                  })}
-                  disabled={loading || !toSavings}
-                  className="min-h-11 gap-1.5 whitespace-nowrap"
-                >
-                  <ArrowDownLeft className="size-4" />
-                  {t('move_to_savings')}
-                </Button>
-              </div>
-              <div className="flex gap-2">
-                <Input
-                  type="number"
-                  placeholder="数量 (INMU)"
-                  value={fromSavings}
-                  onChange={e => setFromSavings(e.target.value)}
-                  className="min-h-11 flex-1"
-                />
-                <Button
-                  variant="outline"
-                  onClick={() => withLoading(async () => {
-                    await api('/balance/move-from-savings', 'POST', { amount: Number(fromSavings) })
-                    setFromSavings('')
-                  })}
-                  disabled={loading || !fromSavings}
-                  className="min-h-11 gap-1.5 whitespace-nowrap"
-                >
-                  <ArrowUpRight className="size-4" />
-                  {t('move_from_savings')}
-                </Button>
-              </div>
-            </div>
-          </Card>
 
           {/* ── ロック機能 ── */}
           <Card className="border-border bg-card p-4">

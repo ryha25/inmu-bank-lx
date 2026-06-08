@@ -4,9 +4,8 @@ import { AdminShell } from '@/components/admin-shell'
 import { PageHeader } from '@/components/page-header'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { Shield, Wallet, WalletCards, ExternalLink, LogOut as WalletDisconnect, Coins } from 'lucide-react'
+import { Shield, WalletCards, ExternalLink, LogOut, Coins } from 'lucide-react'
 import { toast } from 'sonner'
-import { formatInmu } from '@/lib/format'
 
 declare global {
   interface Window {
@@ -21,6 +20,7 @@ declare global {
         isPhantom?: boolean
         connect(): Promise<{ publicKey: { toString(): string } }>
         disconnect(): Promise<void>
+        publicKey?: { toString(): string }
       }
     }
   }
@@ -30,11 +30,27 @@ function getPhantomProvider() {
   return window.phantom?.solana ?? (window.solana?.isPhantom ? window.solana : null)
 }
 
+function isIOS() {
+  return /iPhone|iPad|iPod/.test(navigator.userAgent)
+}
+
+function isAndroid() {
+  return /Android/.test(navigator.userAgent)
+}
+
+function isMobile() {
+  return isIOS() || isAndroid()
+}
+
 export function AdminProfilePage() {
   const [, navigate] = useLocation()
-  const [adminWallet, setAdminWallet] = useState<string | null>(
-    window.phantom?.solana?.publicKey?.toString() ?? window.solana?.publicKey?.toString() ?? null
-  )
+  const [adminWallet, setAdminWallet] = useState<string | null>(() => {
+    return (
+      window.phantom?.solana?.publicKey?.toString() ??
+      (window.solana?.isPhantom ? window.solana?.publicKey?.toString() : null) ??
+      null
+    )
+  })
   const [walletLoading, setWalletLoading] = useState(false)
   const [isAdmin, setIsAdmin] = useState<boolean | null>(null)
 
@@ -57,16 +73,39 @@ export function AdminProfilePage() {
     setWalletLoading(true)
     try {
       const provider = getPhantomProvider()
-      if (!provider?.isPhantom) {
-        toast.error('Phantom ウォレットがインストールされていません')
-        window.open('https://phantom.app/', '_blank')
+
+      // Phantomが既にブラウザ/アプリ内で使用可能な場合
+      if (provider?.isPhantom) {
+        const resp = await provider.connect()
+        setAdminWallet(resp.publicKey.toString())
+        toast.success('管理ウォレットを接続しました')
+        setWalletLoading(false)
         return
       }
-      const resp = await provider.connect()
-      setAdminWallet(resp.publicKey.toString())
-      toast.success('管理ウォレットを接続しました')
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'ウォレット接続に失敗しました')
+
+      // モバイル端末: Phantomアプリへのディープリンク
+      if (isMobile()) {
+        const currentUrl = encodeURIComponent(window.location.href)
+        const ref = encodeURIComponent(window.location.origin)
+        const phantomBrowse = `https://phantom.app/ul/browse/${currentUrl}?ref=${ref}`
+
+        if (isIOS()) {
+          window.location.href = phantomBrowse
+        } else {
+          const intentUrl = `intent://browse/${encodeURIComponent(window.location.href)}#Intent;scheme=phantom;package=app.phantom;S.browser_fallback_url=${encodeURIComponent(phantomBrowse)};end`
+          window.location.href = intentUrl
+        }
+        setWalletLoading(false)
+        return
+      }
+
+      // PCでPhantomが未インストール
+      toast.error('Phantom ウォレットをインストールしてください')
+      window.open('https://phantom.app/', '_blank')
+    } catch (e: unknown) {
+      if (e instanceof Error && e.message !== 'User rejected the request.') {
+        toast.error(e.message)
+      }
     } finally {
       setWalletLoading(false)
     }
@@ -93,9 +132,9 @@ export function AdminProfilePage() {
       <PageHeader titleKey="nav_profile" />
 
       <div className="flex flex-col gap-4 max-w-md">
-        {/* 管理者情報 */}
+        {/* ── 管理者情報 ── */}
         <Card className="border-primary/30 bg-primary/5 p-5">
-          <div className="flex items-center gap-3 mb-4">
+          <div className="flex items-center gap-3">
             <div className="flex size-12 items-center justify-center rounded-full bg-primary/10">
               <Shield className="size-6 text-primary" />
             </div>
@@ -108,7 +147,7 @@ export function AdminProfilePage() {
           </div>
         </Card>
 
-        {/* 管理ウォレット */}
+        {/* ── 管理ウォレット ── */}
         <Card className="border-border bg-card p-4">
           <div className="flex items-center gap-2 mb-4">
             <WalletCards className="size-4 text-primary" />
@@ -132,15 +171,15 @@ export function AdminProfilePage() {
                 </p>
               </div>
 
-              {/* 管理者INMU残高（プレースホルダー） */}
-              <Card className="border-border bg-card p-3">
+              {/* 管理者INMU残高 */}
+              <Card className="border-border bg-secondary/30 p-3">
                 <div className="flex items-center gap-2 mb-1">
                   <Coins className="size-4 text-primary" />
                   <p className="text-xs font-medium text-muted-foreground">管理者 INMU 残高</p>
                 </div>
                 <p className="font-mono text-lg font-bold gold-text">— INMU</p>
                 <p className="text-[10px] text-muted-foreground mt-1">
-                  ウォレット上の INMU 残高はオンチェーンで確認してください
+                  オンチェーン残高は Solscan で確認してください
                 </p>
               </Card>
 
@@ -161,7 +200,7 @@ export function AdminProfilePage() {
                   variant="outline"
                   className="min-h-10 flex-1 text-xs gap-1.5"
                 >
-                  <Wallet className="size-3.5" />
+                  <WalletCards className="size-3.5" />
                   再接続
                 </Button>
                 <Button
@@ -170,7 +209,7 @@ export function AdminProfilePage() {
                   variant="ghost"
                   className="min-h-10 text-destructive gap-1.5 text-xs"
                 >
-                  <WalletDisconnect className="size-3.5" />
+                  <LogOut className="size-3.5" />
                   切断
                 </Button>
               </div>
@@ -189,18 +228,23 @@ export function AdminProfilePage() {
                 <WalletCards className="size-4" />
                 {walletLoading ? '接続中…' : 'Phantom ウォレットに接続'}
               </Button>
+              {isMobile() && (
+                <p className="text-[11px] text-center text-muted-foreground">
+                  iPhoneの場合はPhantomアプリが起動します
+                </p>
+              )}
             </div>
           )}
         </Card>
 
-        {/* ログアウト */}
+        {/* ── ログアウト ── */}
         <Card className="border-border bg-card overflow-hidden">
           <button
             type="button"
             onClick={handleLogout}
             className="flex w-full min-h-[56px] items-center gap-3 px-4 text-sm font-medium text-destructive transition-colors hover:bg-destructive/10 active:bg-destructive/20"
           >
-            <WalletDisconnect className="size-[18px] shrink-0" />
+            <LogOut className="size-[18px] shrink-0" />
             <span className="flex-1 text-left">管理画面からログアウト</span>
           </button>
         </Card>
