@@ -7,9 +7,9 @@ const INMU_TOKEN_MINT = "4FDtAagigMuFcPp36rbd9bzcYTJgQah2qLMYcYtfpump";
 const INMU_DECIMALS = 6;
 
 const RPC_ENDPOINTS = [
-  "https://rpc.ankr.com/solana",
-  "https://solana-mainnet.g.alchemy.com/v2/demo",
   "https://api.mainnet-beta.solana.com",
+  "https://solana-api.projectserum.com",
+  "https://rpc.hellomoon.io/public",
 ];
 
 async function rpcFetch(body: unknown): Promise<Response> {
@@ -88,6 +88,11 @@ async function fetchInmuBalance(wallet: string): Promise<number> {
 
 // ── RPC プロキシ (フロントエンドからの Solana JSON-RPC を中継) ──
 // 秘密鍵不要。blockhash取得・トランザクション送信のみ対応。
+// GET: @solana/web3.js の WebSocket 接続試行を無害に返す
+router.get("/solana/rpc-proxy", (_req, res): void => {
+  res.json({ jsonrpc: "2.0", result: "ok", id: null });
+});
+
 router.post("/solana/rpc-proxy", async (req, res): Promise<void> => {
   try {
     const rpcRes = await rpcFetch(req.body);
