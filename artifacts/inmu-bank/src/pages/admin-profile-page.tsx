@@ -107,31 +107,49 @@ export function AdminProfilePage() {
       .catch(() => { setIsAdmin(false); navigate('/admin-login') })
   }, [navigate])
 
-  // ── 初期化: localStorageからウォレット読み込み + Phantom自動再接続 ──
+  // ── 初期化: サーバー保存ウォレットを優先読み込み + Phantom自動再接続 ──
+  // サーバー側に保存することで、Phantom内ブラウザ・Safari・別端末など
+  // どのブラウザで管理画面を開いてもウォレットアドレスと残高が表示される。
+  // localStorage はオフライン時のキャッシュとして併用。
   useEffect(() => {
     if (initDone.current) return
     initDone.current = true
 
-    const stored = (() => {
+    const localStored = (() => {
       try { return localStorage.getItem(ADMIN_WALLET_KEY) } catch { return null }
     })()
 
-    if (stored) {
-      setSavedWallet(stored)
-      // 残高はバックエンド経由で取得(Phantom不要)
-      fetchBalanceFor(stored)
-      // Phantom がインストール済みなら onlyIfTrusted で静かに再接続
-      const phantom = getPhantom()
-      if (phantom) {
-        phantom.connect({ onlyIfTrusted: true })
-          .then(resp => {
-            if (resp.publicKey.toString() === stored) {
-              setPhantomReady(true)
-            }
-          })
-          .catch(() => { /* ユーザー未承認 → cached 状態のまま */ })
+    void (async () => {
+      let wallet = localStored
+      // サーバー保存値を取得（管理者セッションがあればブラウザを問わず取得可能）
+      try {
+        const res = await fetch('/api/admin/wallet', { credentials: 'include' })
+        if (res.ok) {
+          const d = await res.json() as { wallet: string | null }
+          if (d.wallet) {
+            wallet = d.wallet
+            try { localStorage.setItem(ADMIN_WALLET_KEY, d.wallet) } catch {}
+          }
+        }
+      } catch { /* サーバー未到達時は localStorage を使用 */ }
+
+      if (wallet) {
+        setSavedWallet(wallet)
+        // 残高はバックエンド経由で取得(Phantom不要)
+        fetchBalanceFor(wallet)
+        // Phantom がインストール済みなら onlyIfTrusted で静かに再接続
+        const phantom = getPhantom()
+        if (phantom) {
+          phantom.connect({ onlyIfTrusted: true })
+            .then(resp => {
+              if (resp.publicKey.toString() === wallet) {
+                setPhantomReady(true)
+              }
+            })
+            .catch(() => { /* ユーザー未承認 → cached 状態のまま */ })
+        }
       }
-    }
+    })()
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
@@ -177,6 +195,13 @@ export function AdminProfilePage() {
         setSavedWallet(addr)
         setPhantomReady(true)
         try { localStorage.setItem(ADMIN_WALLET_KEY, addr) } catch {}
+        // サーバー側に保存（ブラウザ跨ぎで永続）
+        fetch('/api/admin/wallet', {
+          method: 'POST',
+          credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ wallet: addr }),
+        }).catch(() => {})
         toast.success('Phantom ウォレットを接続しました')
         fetchBalanceFor(addr)
         return
@@ -212,6 +237,8 @@ export function AdminProfilePage() {
     setPhantomReady(false)
     setInmuBalance(null)
     try { localStorage.removeItem(ADMIN_WALLET_KEY) } catch {}
+    // サーバー側の保存も削除
+    fetch('/api/admin/wallet', { method: 'DELETE', credentials: 'include' }).catch(() => {})
     toast.success('ウォレットを切断しました')
   }
 
