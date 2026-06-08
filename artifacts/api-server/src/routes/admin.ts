@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { db } from "@workspace/db";
+import { db, pool } from "@workspace/db";
 import {
   profileTable,
   userTable,
@@ -40,6 +40,73 @@ async function notify(
 ) {
   await db.insert(notificationsTable).values({ userId, type, title, message });
 }
+
+// ── アプリ設定（KV）テーブル: マイグレーション不要で自動作成 ──
+const ADMIN_WALLET_SETTING_KEY = "admin_wallet";
+let settingsTableReady = false;
+async function ensureSettingsTable() {
+  if (settingsTableReady) return;
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS app_settings (
+      key text PRIMARY KEY,
+      value text NOT NULL,
+      updated_at timestamptz NOT NULL DEFAULT now()
+    )
+  `);
+  settingsTableReady = true;
+}
+
+// ── 管理ウォレットアドレス取得（サーバー側永続: ブラウザ跨ぎで共有） ──
+router.get("/admin/wallet", requireAdmin, async (_req, res): Promise<void> => {
+  try {
+    await ensureSettingsTable();
+    const r = await pool.query(
+      "SELECT value FROM app_settings WHERE key = $1",
+      [ADMIN_WALLET_SETTING_KEY],
+    );
+    res.json({ wallet: (r.rows[0]?.value as string | undefined) ?? null });
+  } catch (e) {
+    console.error("[Admin] get wallet error:", e);
+    res.json({ wallet: null });
+  }
+});
+
+// ── 管理ウォレットアドレス保存 ──
+router.post("/admin/wallet", requireAdmin, async (req, res): Promise<void> => {
+  const { wallet } = req.body as { wallet?: string };
+  // Solanaアドレスは base58 32〜44文字
+  if (!wallet || typeof wallet !== "string" || wallet.length < 32 || wallet.length > 44) {
+    res.status(400).json({ error: "valid wallet address required" });
+    return;
+  }
+  try {
+    await ensureSettingsTable();
+    await pool.query(
+      `INSERT INTO app_settings (key, value, updated_at)
+       VALUES ($1, $2, now())
+       ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = now()`,
+      [ADMIN_WALLET_SETTING_KEY, wallet],
+    );
+    res.json({ ok: true });
+  } catch (e) {
+    console.error("[Admin] save wallet error:", e);
+    res.status(500).json({ error: "Internal error" });
+  }
+});
+
+// ── 管理ウォレットアドレス削除（切断時） ──
+router.delete("/admin/wallet", requireAdmin, async (_req, res): Promise<void> => {
+  try {
+    await ensureSettingsTable();
+    await pool.query("DELETE FROM app_settings WHERE key = $1", [
+      ADMIN_WALLET_SETTING_KEY,
+    ]);
+    res.json({ ok: true });
+  } catch (e) {
+    console.error("[Admin] delete wallet error:", e);
+    res.status(500).json({ error: "Internal error" });
+  }
+});
 
 router.get("/admin/users", requireAdmin, async (req, res): Promise<void> => {
   try {
