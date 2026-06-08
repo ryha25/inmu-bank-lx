@@ -3,14 +3,12 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { useI18n } from '@/lib/i18n/context'
-import { formatInmu } from '@/lib/format'
 import { toast } from 'sonner'
 import { useState } from 'react'
-import { Link, useLocation } from 'wouter'
+import { useLocation } from 'wouter'
 import {
-  User, Wallet, Coins, TrendingUp, TrendingDown, Award,
-  ExternalLink, Bell, Star, ChevronRight, WalletCards,
-  LogOut as WalletDisconnect, LogOut,
+  User, WalletCards,
+  ExternalLink, LogOut as WalletDisconnect, LogOut,
 } from 'lucide-react'
 
 type ProfileData = {
@@ -63,15 +61,8 @@ function isMobile() {
   return isIOS() || isAndroid()
 }
 
-type SecondaryLink = {
-  href: string
-  label: string
-  icon: React.ElementType
-}
-
 export function ProfileView({
   profile,
-  isAdmin,
   onRefresh,
 }: {
   profile: ProfileData
@@ -82,13 +73,8 @@ export function ProfileView({
   const [, navigate] = useLocation()
   const [loading, setLoading] = useState(false)
   const [phantomLoading, setPhantomLoading] = useState(false)
-  const [form, setForm] = useState({
-    displayName: profile.displayName || '',
-    xId: profile.xId || '',
-    discordId: profile.discordId || '',
-    discordUsername: profile.discordUsername || '',
-    solWallet: profile.solWallet || '',
-  })
+  const [displayName, setDisplayName] = useState(profile.displayName || '')
+  const [solWallet, setSolWallet] = useState(profile.solWallet || '')
 
   async function handleSave() {
     setLoading(true)
@@ -97,7 +83,7 @@ export function ProfileView({
         method: 'PUT',
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(form),
+        body: JSON.stringify({ displayName, solWallet }),
       })
       if (!res.ok) throw new Error('Failed to save')
       toast.success(t('success'))
@@ -123,7 +109,7 @@ export function ProfileView({
     try {
       await fetch('/api/auth/sign-out', { method: 'POST', credentials: 'include' })
     } catch {
-      // ignore — clear cookie regardless
+      // ignore
     }
     navigate('/sign-in')
   }
@@ -137,7 +123,7 @@ export function ProfileView({
         const resp = await provider.connect()
         const address = resp.publicKey.toString()
         await saveWallet(address)
-        setForm(f => ({ ...f, solWallet: address }))
+        setSolWallet(address)
         toast.success(t('phantom_connected'))
         onRefresh()
         return
@@ -176,7 +162,7 @@ export function ProfileView({
         await provider.disconnect()
       }
       await saveWallet(null)
-      setForm(f => ({ ...f, solWallet: '' }))
+      setSolWallet('')
       toast.success('Phantom を切断しました')
       onRefresh()
     } catch (e) {
@@ -186,87 +172,42 @@ export function ProfileView({
     }
   }
 
-  const secondaryLinks: SecondaryLink[] = [
-    { href: '/notifications', label: t('nav_notifications'), icon: Bell },
-    { href: '/points',        label: t('nav_points'),        icon: Star },
-  ]
-
   return (
     <div className="flex flex-col gap-4">
-      {/* Stats */}
-      <div className="grid grid-cols-2 gap-3">
-        <Card className="border-border bg-card p-4">
-          <div className="flex items-center gap-2">
-            <Coins className="size-4 text-primary" />
-            <p className="text-xs font-medium text-muted-foreground">{t('current_balance')}</p>
-          </div>
-          <p className="mt-2 font-mono text-xl font-bold tabular-nums gold-text">{formatInmu(profile.balance)}</p>
-        </Card>
-        <Card className="border-border bg-card p-4">
-          <div className="flex items-center gap-2">
-            <Wallet className="size-4 text-accent" />
-            <p className="text-xs font-medium text-muted-foreground">{t('savings_title')}</p>
-          </div>
-          <p className="mt-2 font-mono text-xl font-bold tabular-nums">{formatInmu(profile.savingsBalance)}</p>
-        </Card>
-        <Card className="border-border bg-card p-4">
-          <div className="flex items-center gap-2">
-            <TrendingUp className="size-4 text-chart-5" />
-            <p className="text-xs font-medium text-muted-foreground">{t('total_received')}</p>
-          </div>
-          <p className="mt-2 font-mono text-xl font-bold tabular-nums text-chart-5">{formatInmu(profile.totalReceived)}</p>
-        </Card>
-        <Card className="border-border bg-card p-4">
-          <div className="flex items-center gap-2">
-            <TrendingDown className="size-4 text-destructive" />
-            <p className="text-xs font-medium text-muted-foreground">{t('total_sent')}</p>
-          </div>
-          <p className="mt-2 font-mono text-xl font-bold tabular-nums text-destructive">{formatInmu(profile.totalSent)}</p>
-        </Card>
-      </div>
-
+      {/* ── 表示名 ── */}
       <Card className="border-border bg-card p-4">
-        <div className="flex items-center gap-2">
-          <Award className="size-4 text-primary" />
-          <p className="text-xs font-medium text-muted-foreground">{t('monthly_points')}</p>
+        <div className="flex items-center gap-2 mb-4">
+          <User className="size-4 text-primary" />
+          <h2 className="font-semibold">{t('profile_title')}</h2>
         </div>
-        <p className="mt-2 font-mono text-xl font-bold tabular-nums">{formatInmu(profile.monthlyPoints)}</p>
+        <div className="flex flex-col gap-3">
+          <div className="flex flex-col gap-1.5">
+            <Label>{t('displayName')}</Label>
+            <Input
+              value={displayName}
+              onChange={e => setDisplayName(e.target.value)}
+              className="min-h-11"
+            />
+          </div>
+          <Button onClick={handleSave} disabled={loading} className="min-h-11">
+            {t('save')}
+          </Button>
+        </div>
+        <p className="mt-3 text-xs text-muted-foreground">
+          {t('registered_at')}: {new Date(profile.createdAt).toLocaleDateString('ja-JP')}
+        </p>
       </Card>
 
-      {/* ── Secondary nav links ── */}
-      <Card className="border-border bg-card overflow-hidden">
-        <div className="px-4 py-3 border-b border-border">
-          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">その他の機能</p>
-        </div>
-        <ul>
-          {secondaryLinks.map((link, i) => {
-            const Icon = link.icon
-            return (
-              <li key={link.href} className={i > 0 ? 'border-t border-border' : ''}>
-                <Link
-                  href={link.href}
-                  className="flex min-h-[52px] items-center gap-3 px-4 text-sm font-medium text-foreground transition-colors hover:bg-secondary active:bg-secondary"
-                >
-                  <Icon className="size-[18px] shrink-0 text-muted-foreground" />
-                  <span className="flex-1">{link.label}</span>
-                  <ChevronRight className="size-4 text-muted-foreground" />
-                </Link>
-              </li>
-            )
-          })}
-        </ul>
-      </Card>
-
-      {/* ── Phantom Wallet ── */}
+      {/* ── SOLアドレス & Phantom ── */}
       <Card className="border-border bg-card p-4">
         <div className="flex items-center justify-between mb-3">
           <div className="flex items-center gap-2">
             <WalletCards className="size-4 text-primary" />
             <h3 className="font-semibold text-sm">Phantom Wallet</h3>
           </div>
-          {form.solWallet && (
+          {solWallet && (
             <a
-              href={`https://solscan.io/account/${form.solWallet}`}
+              href={`https://solscan.io/account/${solWallet}`}
               target="_blank"
               rel="noopener noreferrer"
               className="flex items-center gap-1 text-xs text-primary hover:underline"
@@ -276,11 +217,15 @@ export function ProfileView({
           )}
         </div>
 
-        {form.solWallet ? (
+        {solWallet ? (
           <div className="flex flex-col gap-2">
-            <p className="font-mono text-xs text-muted-foreground break-all bg-secondary/30 rounded p-2">
-              {form.solWallet.slice(0, 6)}…{form.solWallet.slice(-6)}
-            </p>
+            {/* SOLアドレス短縮表示 */}
+            <div className="rounded-md bg-secondary/50 p-2.5">
+              <p className="text-[10px] text-muted-foreground mb-1">SOL アドレス</p>
+              <p className="font-mono text-xs text-foreground">
+                {solWallet.slice(0, 6)}…{solWallet.slice(-6)}
+              </p>
+            </div>
             <p className="text-[11px] text-muted-foreground">{t('wallet_private')}</p>
             <div className="flex gap-2">
               <Button
@@ -321,66 +266,7 @@ export function ProfileView({
         )}
       </Card>
 
-      {/* Profile form */}
-      <Card className="border-border bg-card p-4">
-        <div className="flex items-center gap-2 mb-4">
-          <User className="size-4 text-primary" />
-          <h2 className="font-semibold">{t('profile_title')}</h2>
-        </div>
-        <div className="flex flex-col gap-3">
-          <div className="flex flex-col gap-1.5">
-            <Label>{t('displayName')}</Label>
-            <Input
-              value={form.displayName}
-              onChange={e => setForm({ ...form, displayName: e.target.value })}
-              className="min-h-11"
-            />
-          </div>
-          <div className="flex flex-col gap-1.5">
-            <Label>{t('x_id')}</Label>
-            <Input
-              value={form.xId}
-              onChange={e => setForm({ ...form, xId: e.target.value })}
-              className="min-h-11"
-              placeholder="@username"
-            />
-          </div>
-          <div className="flex flex-col gap-1.5">
-            <Label>{t('discord_id')}</Label>
-            <Input
-              value={form.discordId}
-              onChange={e => setForm({ ...form, discordId: e.target.value })}
-              className="min-h-11"
-            />
-          </div>
-          <div className="flex flex-col gap-1.5">
-            <Label>{t('discord_username')}</Label>
-            <Input
-              value={form.discordUsername}
-              onChange={e => setForm({ ...form, discordUsername: e.target.value })}
-              className="min-h-11"
-            />
-          </div>
-          <div className="flex flex-col gap-1.5">
-            <Label>{t('sol_wallet')}</Label>
-            <Input
-              value={form.solWallet}
-              onChange={e => setForm({ ...form, solWallet: e.target.value })}
-              className="min-h-11 font-mono text-xs"
-              placeholder="SOL address"
-            />
-            <p className="text-[11px] text-muted-foreground">{t('wallet_private')}</p>
-          </div>
-          <Button onClick={handleSave} disabled={loading} className="min-h-11">
-            {t('save')}
-          </Button>
-        </div>
-        <p className="mt-3 text-xs text-muted-foreground">
-          {t('registered_at')}: {new Date(profile.createdAt).toLocaleDateString('ja-JP')}
-        </p>
-      </Card>
-
-      {/* ── Logout ── */}
+      {/* ── ログアウト ── */}
       <Card className="border-border bg-card overflow-hidden">
         <button
           type="button"

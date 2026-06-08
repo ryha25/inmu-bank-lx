@@ -19,27 +19,25 @@ function safeEqual(a: string, b: string): boolean {
 }
 
 router.post("/auth/admin-sign-in", (req, res): void => {
-  const { email, password } = req.body as { email?: string; password?: string };
+  const { code } = req.body as { code?: string };
 
-  if (!email || !password) {
-    res.status(400).json({ error: "Email and password required" });
+  if (!code) {
+    res.status(400).json({ error: "Code required" });
     return;
   }
 
-  const adminEmail = process.env.ADMIN_EMAIL;
-  const adminPassword = process.env.ADMIN_PASSWORD;
+  const adminCode = process.env.ADMIN_CODE;
 
-  if (!adminEmail || !adminPassword) {
-    console.error("[AdminAuth] ADMIN_EMAIL or ADMIN_PASSWORD secret not set");
+  if (!adminCode) {
+    console.error("[AdminAuth] ADMIN_CODE secret not set");
     res.status(503).json({ error: "Admin credentials not configured" });
     return;
   }
 
-  const emailMatch = safeEqual(email, adminEmail);
-  const passwordMatch = safeEqual(password, adminPassword);
+  const codeMatch = safeEqual(code, adminCode);
 
-  if (!emailMatch || !passwordMatch) {
-    console.warn(`[AdminAuth] Failed admin login attempt for email: ${email}`);
+  if (!codeMatch) {
+    console.warn(`[AdminAuth] Failed admin login attempt`);
     res.status(401).json({ error: "Invalid credentials" });
     return;
   }
@@ -71,13 +69,13 @@ router.post("/auth/admin-code-login", (req, res): void => {
     return;
   }
 
-  const adminPassword = process.env.ADMIN_PASSWORD;
-  if (!adminPassword) {
+  const adminCode = process.env.ADMIN_CODE;
+  if (!adminCode) {
     res.status(503).json({ error: "Admin credentials not configured" });
     return;
   }
 
-  const match = safeEqual(code, adminPassword);
+  const match = safeEqual(code, adminCode);
   if (!match) {
     console.warn("[AdminAuth] Failed admin code login attempt");
     res.status(401).json({ error: "Invalid code" });

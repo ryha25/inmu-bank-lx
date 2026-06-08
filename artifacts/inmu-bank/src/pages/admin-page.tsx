@@ -1,12 +1,9 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useLocation } from 'wouter'
-import { AppShell } from '@/components/app-shell'
+import { AdminShell } from '@/components/admin-shell'
 import { AdminPanel } from '@/components/admin-panel'
 import { PageHeader } from '@/components/page-header'
 import { useI18n } from '@/lib/i18n/context'
-import { useAuth } from '@/hooks/use-auth'
-import { Button } from '@/components/ui/button'
-import { LogOut } from 'lucide-react'
 
 type UserRow = {
   userId: string
@@ -24,7 +21,6 @@ type UserRow = {
 
 export function AdminPage() {
   const { t } = useI18n()
-  const { profile, unread } = useAuth()
   const [, navigate] = useLocation()
   const [users, setUsers] = useState<UserRow[]>([])
   const [loading, setLoading] = useState(true)
@@ -62,17 +58,11 @@ export function AdminPage() {
   }
 
   return (
-    <AppShell isAdmin displayName={profile?.displayName ?? ''} unread={unread}>
-      <div className="flex items-center justify-between mb-2">
-        <PageHeader titleKey="nav_admin" />
-        <Button variant="outline" size="sm" onClick={handleLogout} className="shrink-0">
-          <LogOut className="size-4 mr-1" />
-          ログアウト
-        </Button>
-      </div>
+    <AdminShell onLogout={handleLogout}>
+      <PageHeader titleKey="nav_admin" />
       {loading
         ? <div className="py-20 text-center text-muted-foreground">{t('loading')}</div>
         : <AdminPanel users={users} onRefresh={load} />}
-    </AppShell>
+    </AdminShell>
   )
 }

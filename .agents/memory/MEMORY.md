@@ -1,0 +1,2 @@
+- [Admin Auth Pattern](admin-auth.md) — Admin uses ADMIN_CODE env var (not ADMIN_PASSWORD) via /api/auth/admin-code-login; code is INMU2026 (stored in env, not hardcoded)
+- [Admin Shell Separation](admin-shell.md) — Admin uses separate AdminShell component with 2 nav items only (Profile + 管理ツール); never shares AppShell with regular users
