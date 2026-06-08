@@ -5,7 +5,7 @@ import { AdminPanel } from '@/components/admin-panel'
 import { PageHeader } from '@/components/page-header'
 import { useI18n } from '@/lib/i18n/context'
 
-type UserRow = {
+export type UserRow = {
   userId: string
   displayName: string
   role: string
@@ -13,9 +13,11 @@ type UserRow = {
   savingsBalance: string
   totalReceived: string
   totalSent: string
+  monthlyPoints: string
   participationCount: number
   xId: string | null
   discordId: string | null
+  solWallet: string | null
   createdAt: string
 }
 

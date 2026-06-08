@@ -52,9 +52,11 @@ router.get("/admin/users", requireAdmin, async (req, res): Promise<void> => {
         savingsBalance: profileTable.savingsBalance,
         totalReceived: profileTable.totalReceived,
         totalSent: profileTable.totalSent,
+        monthlyPoints: profileTable.monthlyPoints,
         participationCount: profileTable.participationCount,
         xId: profileTable.xId,
         discordId: profileTable.discordId,
+        solWallet: profileTable.solWallet,
         createdAt: profileTable.createdAt,
       })
       .from(profileTable)
@@ -62,6 +64,76 @@ router.get("/admin/users", requireAdmin, async (req, res): Promise<void> => {
     res.json(
       users.map((u) => ({ ...u, createdAt: u.createdAt.toISOString() })),
     );
+  } catch {
+    res.status(500).json({ error: "Internal error" });
+  }
+});
+
+// ── ユーザー取引履歴（管理者用） ──
+router.get("/admin/user-transactions", requireAdmin, async (req, res): Promise<void> => {
+  const userId = req.query.userId as string | undefined;
+  if (!userId) {
+    res.status(400).json({ error: "userId required" });
+    return;
+  }
+  try {
+    const rows = await db
+      .select()
+      .from(transactionsTable)
+      .where(eq(transactionsTable.userId, userId))
+      .orderBy(sql`${transactionsTable.createdAt} DESC`)
+      .limit(50);
+    res.json(rows.map((t) => ({ ...t, createdAt: t.createdAt.toISOString() })));
+  } catch {
+    res.status(500).json({ error: "Internal error" });
+  }
+});
+
+// ── SOL実送金記録（管理者用） ──
+router.post("/admin/record-sol-transfer", requireAdmin, async (req, res): Promise<void> => {
+  const adminId = "admin";
+  const { targetUserId, amount, txSignature, targetWallet } = req.body as {
+    targetUserId?: string;
+    amount?: number;
+    txSignature?: string;
+    targetWallet?: string;
+  };
+  if (!targetUserId || !amount || amount <= 0 || !txSignature) {
+    res.status(400).json({ error: "targetUserId, amount, txSignature required" });
+    return;
+  }
+  try {
+    // 取引履歴に記録
+    await db.insert(transactionsTable).values({
+      userId: targetUserId,
+      type: "airdrop",
+      amount: String(amount),
+      memo: `実INMU送金 (tx: ${txSignature.slice(0, 12)}…)`,
+      counterparty: "管理者ウォレット",
+    });
+    // 残高更新
+    await db
+      .update(profileTable)
+      .set({
+        balance: sql`${profileTable.balance} + ${amount}`,
+        totalReceived: sql`${profileTable.totalReceived} + ${amount}`,
+        updatedAt: new Date(),
+      })
+      .where(eq(profileTable.userId, targetUserId));
+    // 通知
+    await notify(
+      targetUserId,
+      "airdrop",
+      `${amount} INMU を受け取りました`,
+      `オンチェーン送金完了 (sig: ${txSignature.slice(0, 16)}…)`,
+    );
+    // 監査ログ
+    await logAudit(adminId, "adminSolTransfer", targetUserId, {
+      amount,
+      txSignature,
+      targetWallet,
+    });
+    res.json({ ok: true });
   } catch {
     res.status(500).json({ error: "Internal error" });
   }
