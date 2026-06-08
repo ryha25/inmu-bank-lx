@@ -2,22 +2,25 @@ import { useEffect, useState } from 'react'
 import { AppShell } from '@/components/app-shell'
 import { RankingView } from '@/components/ranking-view'
 import { PageHeader } from '@/components/page-header'
-import { useI18n } from '@/lib/i18n/context'
 import { useAuth } from '@/hooks/use-auth'
 
+type InmuRow   = { rank: number; userId: string; displayName: string; balance: number; totalReceived: number; participations: number }
+type PointsRow = { rank: number; userId: string; displayName: string; points: number; participations: number }
+
 export function RankingPage() {
-  const { t } = useI18n()
   const { profile, unread } = useAuth()
-  const [rows, setRows] = useState<{ rank: number; userId: string; displayName: string; balance: number; totalReceived: number; participations: number }[]>([])
+  const [inmuRows,   setInmuRows]   = useState<InmuRow[]>([])
+  const [pointsRows, setPointsRows] = useState<PointsRow[]>([])
 
   useEffect(() => {
-    fetch('/api/ranking', { credentials: 'include' }).then(r => r.json()).then(setRows)
+    fetch('/api/ranking',        { credentials: 'include' }).then(r => r.json()).then(setInmuRows)
+    fetch('/api/ranking/points', { credentials: 'include' }).then(r => r.json()).then(setPointsRows)
   }, [])
 
   return (
     <AppShell isAdmin={profile?.role === 'admin'} displayName={profile?.displayName ?? ''} unread={unread}>
       <PageHeader titleKey="nav_ranking" />
-      <RankingView rows={rows} />
+      <RankingView inmuRows={inmuRows} pointsRows={pointsRows} />
     </AppShell>
   )
 }

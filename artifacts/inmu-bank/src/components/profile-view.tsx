@@ -4,13 +4,14 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { useI18n } from '@/lib/i18n/context'
 import { formatInmu } from '@/lib/format'
+import { fetchInmuTokenBalance } from '@/lib/solana'
 import { toast } from 'sonner'
-import { useState } from 'react'
-import { Link } from 'wouter'
+import { useState, useEffect } from 'react'
+import { Link, useLocation } from 'wouter'
 import {
   User, Wallet, Coins, TrendingUp, TrendingDown, Award,
   ExternalLink, Bell, Star, Shield, ChevronRight, WalletCards,
-  LogOut as WalletDisconnect,
+  LogOut as WalletDisconnect, LogOut,
 } from 'lucide-react'
 
 type ProfileData = {
@@ -80,8 +81,11 @@ export function ProfileView({
   onRefresh: () => void
 }) {
   const { t } = useI18n()
+  const [, navigate] = useLocation()
   const [loading, setLoading] = useState(false)
   const [phantomLoading, setPhantomLoading] = useState(false)
+  const [inmuOnChain, setInmuOnChain] = useState<number | null>(null)
+  const [inmuFetching, setInmuFetching] = useState(false)
   const [form, setForm] = useState({
     displayName: profile.displayName || '',
     xId: profile.xId || '',
@@ -89,6 +93,19 @@ export function ProfileView({
     discordUsername: profile.discordUsername || '',
     solWallet: profile.solWallet || '',
   })
+
+  // Auto-fetch INMU on-chain balance when wallet is connected
+  useEffect(() => {
+    if (!form.solWallet) {
+      setInmuOnChain(null)
+      return
+    }
+    setInmuFetching(true)
+    fetchInmuTokenBalance(form.solWallet)
+      .then(bal => setInmuOnChain(bal))
+      .catch(() => setInmuOnChain(null))
+      .finally(() => setInmuFetching(false))
+  }, [form.solWallet])
 
   async function handleSave() {
     setLoading(true)
@@ -119,6 +136,15 @@ export function ProfileView({
     if (!res.ok) throw new Error('Failed to save wallet')
   }
 
+  async function handleLogout() {
+    try {
+      await fetch('/api/sign-out', { method: 'POST', credentials: 'include' })
+    } catch {
+      // ignore — clear cookie regardless
+    }
+    navigate('/sign-in')
+  }
+
   async function connectPhantom() {
     setPhantomLoading(true)
     try {
@@ -142,10 +168,8 @@ export function ProfileView({
         const phantomBrowse = `https://phantom.app/ul/browse/${currentUrl}?ref=${ref}`
 
         if (isIOS()) {
-          // Try app deep link first, fall back to App Store
           window.location.href = phantomBrowse
         } else {
-          // Android: intent URL, fallback to web
           const intentUrl = `intent://browse/${encodeURIComponent(window.location.href)}#Intent;scheme=phantom;package=app.phantom;S.browser_fallback_url=${encodeURIComponent(phantomBrowse)};end`
           window.location.href = intentUrl
         }
@@ -173,6 +197,7 @@ export function ProfileView({
       }
       await saveWallet(null)
       setForm(f => ({ ...f, solWallet: '' }))
+      setInmuOnChain(null)
       toast.success('Phantom を切断しました')
       onRefresh()
     } catch (e) {
@@ -282,6 +307,21 @@ export function ProfileView({
             <p className="font-mono text-xs text-muted-foreground break-all bg-secondary/30 rounded p-2">
               {form.solWallet}
             </p>
+
+            {/* INMU on-chain balance — no SOL */}
+            <div className="rounded-lg bg-primary/5 border border-primary/20 px-3 py-2">
+              <p className="text-[11px] font-medium text-muted-foreground mb-1">{t('inmu_wallet_balance')}</p>
+              {inmuFetching ? (
+                <p className="font-mono text-sm text-muted-foreground animate-pulse">{t('inmu_wallet_fetching')}</p>
+              ) : inmuOnChain !== null ? (
+                <p className="font-mono text-lg font-bold gold-text tabular-nums">
+                  {inmuOnChain.toLocaleString()} <span className="text-sm font-normal text-muted-foreground">INMU</span>
+                </p>
+              ) : (
+                <p className="text-xs text-muted-foreground">{t('inmu_wallet_not_set')}</p>
+              )}
+            </div>
+
             <p className="text-[11px] text-muted-foreground">{t('wallet_private')}</p>
             <div className="flex gap-2">
               <Button
@@ -379,6 +419,18 @@ export function ProfileView({
         <p className="mt-3 text-xs text-muted-foreground">
           {t('registered_at')}: {new Date(profile.createdAt).toLocaleDateString('ja-JP')}
         </p>
+      </Card>
+
+      {/* ── Logout ── */}
+      <Card className="border-border bg-card overflow-hidden">
+        <button
+          type="button"
+          onClick={handleLogout}
+          className="flex w-full min-h-[56px] items-center gap-3 px-4 text-sm font-medium text-destructive transition-colors hover:bg-destructive/10 active:bg-destructive/20"
+        >
+          <LogOut className="size-[18px] shrink-0" />
+          <span className="flex-1 text-left">{t('nav_signout')}</span>
+        </button>
       </Card>
     </div>
   )
