@@ -9,7 +9,7 @@ import { useState } from 'react'
 import { Link, useLocation } from 'wouter'
 import {
   User, Wallet, Coins, TrendingUp, TrendingDown, Award,
-  ExternalLink, Bell, Star, Shield, ChevronRight, WalletCards,
+  ExternalLink, Bell, Star, ChevronRight, WalletCards,
   LogOut as WalletDisconnect, LogOut,
 } from 'lucide-react'
 
@@ -189,7 +189,6 @@ export function ProfileView({
   const secondaryLinks: SecondaryLink[] = [
     { href: '/notifications', label: t('nav_notifications'), icon: Bell },
     { href: '/points',        label: t('nav_points'),        icon: Star },
-    { href: '/admin',         label: t('nav_admin'),         icon: Shield },
   ]
 
   return (

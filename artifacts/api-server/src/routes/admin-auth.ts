@@ -63,4 +63,35 @@ router.get("/auth/admin-session", (req, res): void => {
   res.json({ isAdmin: !!req.isAdminSession });
 });
 
+router.post("/auth/admin-code-login", (req, res): void => {
+  const { code } = req.body as { code?: string };
+
+  if (!code) {
+    res.status(400).json({ error: "Code required" });
+    return;
+  }
+
+  const adminPassword = process.env.ADMIN_PASSWORD;
+  if (!adminPassword) {
+    res.status(503).json({ error: "Admin credentials not configured" });
+    return;
+  }
+
+  const match = safeEqual(code, adminPassword);
+  if (!match) {
+    console.warn("[AdminAuth] Failed admin code login attempt");
+    res.status(401).json({ error: "Invalid code" });
+    return;
+  }
+
+  console.info("[AdminAuth] Admin code login successful");
+  res.cookie(ADMIN_SESSION_COOKIE, makeAdminSessionValue(), {
+    httpOnly: true,
+    sameSite: "lax",
+    maxAge: 8 * 60 * 60 * 1000,
+    path: "/",
+  });
+  res.json({ ok: true });
+});
+
 export default router;

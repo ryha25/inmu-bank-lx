@@ -68,7 +68,7 @@ router.get("/admin/users", requireAdmin, async (req, res): Promise<void> => {
 });
 
 router.post("/admin/balance", requireAdmin, async (req, res): Promise<void> => {
-  const adminId = req.userId!;
+  const adminId = req.userId ?? "admin";
   const { targetUserId, newBalance, reason } = req.body as {
     targetUserId?: string;
     newBalance?: number;
@@ -103,7 +103,7 @@ router.post(
   "/admin/register-tx",
   requireAdmin,
   async (req, res): Promise<void> => {
-    const adminId = req.userId!;
+    const adminId = req.userId ?? "admin";
     const { targetUserId, type, amount, memo } = req.body as {
       targetUserId?: string;
       type?: string;
@@ -157,7 +157,7 @@ router.post(
   "/admin/distribute-reward",
   requireAdmin,
   async (req, res): Promise<void> => {
-    const adminId = req.userId!;
+    const adminId = req.userId ?? "admin";
     const { targetUserId, rewardType, amount, memo } = req.body as {
       targetUserId?: string;
       rewardType?: string;
@@ -211,7 +211,7 @@ router.post(
   "/admin/distribute-airdrop",
   requireAdmin,
   async (req, res): Promise<void> => {
-    const adminId = req.userId!;
+    const adminId = req.userId ?? "admin";
     const { targetUserIds, amount, memo } = req.body as {
       targetUserIds?: string[];
       amount?: number;
@@ -254,7 +254,7 @@ router.post(
   "/admin/reset-user",
   requireAdmin,
   async (req, res): Promise<void> => {
-    const adminId = req.userId!;
+    const adminId = req.userId ?? "admin";
     const { targetUserId, resetType } = req.body as {
       targetUserId?: string;
       resetType?: "balance" | "history" | "all";
@@ -308,7 +308,7 @@ router.post(
   "/admin/reset-all",
   requireAdmin,
   async (req, res): Promise<void> => {
-    const adminId = req.userId!;
+    const adminId = req.userId ?? "admin";
     try {
       await db.delete(transactionsTable);
       await db.delete(rewardsTable);
@@ -352,7 +352,7 @@ router.get(
   "/admin/backup-csv",
   requireAdmin,
   async (req, res): Promise<void> => {
-    const adminId = req.userId!;
+    const adminId = req.userId ?? "admin";
     try {
       const users = await db
         .select({
@@ -428,7 +428,7 @@ router.post("/admin/verify-code", requireAdmin, async (req, res): Promise<void> 
 });
 
 router.post("/admin/grant-points", requireAdmin, async (req, res): Promise<void> => {
-  const adminId = req.userId!;
+  const adminId = req.userId ?? "admin";
   const { targetUserIds, amount, reason } = req.body as {
     targetUserIds?: string[];
     amount?: number;
@@ -457,7 +457,7 @@ router.post("/admin/grant-points", requireAdmin, async (req, res): Promise<void>
 });
 
 router.post("/admin/send-notification", requireAdmin, async (req, res): Promise<void> => {
-  const adminId = req.userId!;
+  const adminId = req.userId ?? "admin";
   const { targetUserIds, title, message } = req.body as {
     targetUserIds?: string[];
     title?: string;
@@ -479,7 +479,7 @@ router.post("/admin/send-notification", requireAdmin, async (req, res): Promise<
 });
 
 router.post("/admin/deduct-balance", requireAdmin, async (req, res): Promise<void> => {
-  const adminId = req.userId!;
+  const adminId = req.userId ?? "admin";
   const { targetUserId, amount, reason } = req.body as {
     targetUserId?: string;
     amount?: number;
@@ -521,8 +521,55 @@ router.post("/admin/deduct-balance", requireAdmin, async (req, res): Promise<voi
   }
 });
 
+router.post("/admin/grant-points-all", requireAdmin, async (req, res): Promise<void> => {
+  const adminId = req.userId ?? "admin";
+  const { amount, reason } = req.body as { amount?: number; reason?: string };
+  if (!amount || amount <= 0) {
+    res.status(400).json({ error: "amount required" });
+    return;
+  }
+  try {
+    const allUsers = await db.select({ userId: profileTable.userId }).from(profileTable);
+    for (const u of allUsers) {
+      await db
+        .update(profileTable)
+        .set({ monthlyPoints: sql`${profileTable.monthlyPoints} + ${amount}`, updatedAt: new Date() })
+        .where(eq(profileTable.userId, u.userId));
+      await notify(u.userId, "points", `${amount}ポイントが付与されました`, reason ?? `${amount} pts`);
+    }
+    await logAudit(adminId, "adminGrantPointsAll", undefined, { count: allUsers.length, amount, reason });
+    res.json({ ok: true, count: allUsers.length });
+  } catch {
+    res.status(500).json({ error: "Internal error" });
+  }
+});
+
+router.post("/admin/distribute-airdrop-all", requireAdmin, async (req, res): Promise<void> => {
+  const adminId = req.userId ?? "admin";
+  const { amount, memo } = req.body as { amount?: number; memo?: string };
+  if (!amount || amount <= 0) {
+    res.status(400).json({ error: "amount required" });
+    return;
+  }
+  try {
+    const allUsers = await db.select({ userId: profileTable.userId }).from(profileTable);
+    for (const u of allUsers) {
+      await db.insert(transactionsTable).values({ userId: u.userId, type: "airdrop", amount: String(amount), memo });
+      await db
+        .update(profileTable)
+        .set({ balance: sql`${profileTable.balance} + ${amount}`, participationCount: sql`${profileTable.participationCount} + 1`, updatedAt: new Date() })
+        .where(eq(profileTable.userId, u.userId));
+      await notify(u.userId, "airdrop", "エアドロップを受け取りました", `${amount} INMU`);
+    }
+    await logAudit(adminId, "adminDistributeAirdropAll", undefined, { count: allUsers.length, amount });
+    res.json({ ok: true, count: allUsers.length });
+  } catch {
+    res.status(500).json({ error: "Internal error" });
+  }
+});
+
 router.post("/admin/set-role", requireAdmin, async (req, res): Promise<void> => {
-  const adminId = req.userId!;
+  const adminId = req.userId ?? "admin";
   const { targetUserId, role } = req.body as {
     targetUserId?: string;
     role?: "user" | "admin";

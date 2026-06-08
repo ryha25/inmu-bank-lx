@@ -9,6 +9,7 @@ import { useState } from 'react'
 import {
   Search, Download, Shield, User, Trash2,
   CheckSquare, Square, Send, Star, MinusCircle, Coins,
+  Wallet, ExternalLink, WalletCards,
 } from 'lucide-react'
 
 type UserRow = {
@@ -48,38 +49,51 @@ async function api(path: string, method: string, body?: unknown) {
   return res.json()
 }
 
+declare global {
+  interface Window {
+    solana?: {
+      isPhantom?: boolean
+      connect(opts?: { onlyIfTrusted?: boolean }): Promise<{ publicKey: { toString(): string } }>
+      disconnect(): Promise<void>
+      publicKey?: { toString(): string }
+    }
+  }
+}
+
 export function AdminPanel({ users, onRefresh }: { users: UserRow[]; onRefresh: () => void }) {
   const { t } = useI18n()
 
-  // Search & selection
   const [search, setSearch] = useState('')
   const [selected, setSelected] = useState<Set<string>>(new Set())
-
-  // Single user actions
   const [focusUser, setFocusUser] = useState<UserRow | null>(null)
+
   const [amount, setAmount] = useState('')
   const [reason, setReason] = useState('')
   const [txType, setTxType] = useState('deposit')
-  const [rewardType, setRewardType] = useState('810day')
   const [loading, setLoading] = useState(false)
 
-  // Bulk action states
   const [bulkAmount, setBulkAmount] = useState('')
+  const [bulkDeductAmount, setBulkDeductAmount] = useState('')
   const [bulkReason, setBulkReason] = useState('')
   const [notifTitle, setNotifTitle] = useState('')
   const [notifMsg, setNotifMsg] = useState('')
   const [pointsAmount, setPointsAmount] = useState('')
 
-  // Airdrop all
-  const [airdropAmount, setAirdropAmount] = useState('')
-  const [airdropMemo, setAirdropMemo] = useState('')
+  const [airdropAllAmount, setAirdropAllAmount] = useState('')
+  const [airdropAllMemo, setAirdropAllMemo] = useState('')
+  const [pointsAllAmount, setPointsAllAmount] = useState('')
+  const [pointsAllReason, setPointsAllReason] = useState('')
 
   const [auditLogs, setAuditLogs] = useState<AuditRow[]>([])
+
+  const [adminWallet, setAdminWallet] = useState<string | null>(
+    window.solana?.publicKey?.toString() ?? null
+  )
+  const [adminWalletLoading, setAdminWalletLoading] = useState(false)
 
   const filtered = users.filter(u =>
     u.displayName.toLowerCase().includes(search.toLowerCase())
   )
-
   const allSelected = filtered.length > 0 && filtered.every(u => selected.has(u.userId))
   const selectedIds = Array.from(selected)
 
@@ -93,11 +107,8 @@ export function AdminPanel({ users, onRefresh }: { users: UserRow[]; onRefresh: 
   }
 
   function toggleAll() {
-    if (allSelected) {
-      setSelected(new Set())
-    } else {
-      setSelected(new Set(filtered.map(u => u.userId)))
-    }
+    if (allSelected) setSelected(new Set())
+    else setSelected(new Set(filtered.map(u => u.userId)))
   }
 
   async function withLoading(fn: () => Promise<void>) {
@@ -140,6 +151,36 @@ export function AdminPanel({ users, onRefresh }: { users: UserRow[]; onRefresh: 
     }
   }
 
+  async function connectAdminWallet() {
+    if (!window.solana?.isPhantom) {
+      toast.error('Phantom ウォレットがインストールされていません')
+      return
+    }
+    setAdminWalletLoading(true)
+    try {
+      const resp = await window.solana.connect()
+      setAdminWallet(resp.publicKey.toString())
+      toast.success('管理ウォレットを接続しました')
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'ウォレット接続に失敗しました')
+    } finally {
+      setAdminWalletLoading(false)
+    }
+  }
+
+  async function disconnectAdminWallet() {
+    setAdminWalletLoading(true)
+    try {
+      await window.solana?.disconnect()
+      setAdminWallet(null)
+      toast.success('管理ウォレットを切断しました')
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'エラーが発生しました')
+    } finally {
+      setAdminWalletLoading(false)
+    }
+  }
+
   return (
     <div className="flex flex-col gap-4">
       <div className="flex items-center gap-2 text-primary">
@@ -147,7 +188,6 @@ export function AdminPanel({ users, onRefresh }: { users: UserRow[]; onRefresh: 
         <p className="text-sm font-medium">{t('admin_only')}</p>
       </div>
 
-      {/* Search */}
       <div className="relative">
         <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
         <Input
@@ -159,16 +199,16 @@ export function AdminPanel({ users, onRefresh }: { users: UserRow[]; onRefresh: 
       </div>
 
       <Tabs defaultValue="users">
-        <TabsList className="grid w-full grid-cols-4">
+        <TabsList className="grid w-full grid-cols-5">
           <TabsTrigger value="users">Users</TabsTrigger>
           <TabsTrigger value="actions">Actions</TabsTrigger>
+          <TabsTrigger value="wallet">Wallet</TabsTrigger>
           <TabsTrigger value="audit">Audit</TabsTrigger>
           <TabsTrigger value="reset">Reset</TabsTrigger>
         </TabsList>
 
         {/* ── Users tab ── */}
         <TabsContent value="users" className="flex flex-col gap-3 mt-3">
-          {/* Select all */}
           <div className="flex items-center justify-between">
             <button
               type="button"
@@ -223,11 +263,94 @@ export function AdminPanel({ users, onRefresh }: { users: UserRow[]; onRefresh: 
         {/* ── Actions tab ── */}
         <TabsContent value="actions" className="flex flex-col gap-4 mt-3">
 
-          {/* Bulk actions (multiple selected) */}
+          {/* ═══ イベント報酬 (全員) ═══ */}
+          <div className="rounded-lg border border-primary/40 bg-primary/5 p-4 flex flex-col gap-4">
+            <p className="text-sm font-semibold text-primary flex items-center gap-2">
+              <Star className="size-4" />
+              イベント報酬
+            </p>
+
+            {/* エアドロップ全員 */}
+            <div className="flex flex-col gap-2">
+              <p className="text-xs font-medium text-muted-foreground flex items-center gap-1">
+                <Coins className="size-3" /> エアドロップ配布（全員）
+              </p>
+              <div className="flex gap-2">
+                <Input
+                  type="number"
+                  placeholder="配布量 / 人"
+                  value={airdropAllAmount}
+                  onChange={e => setAirdropAllAmount(e.target.value)}
+                  className="min-h-10 flex-1"
+                />
+                <Button
+                  onClick={() => withLoading(async () => {
+                    const d = await api('/admin/distribute-airdrop-all', 'POST', {
+                      amount: Number(airdropAllAmount),
+                      memo: airdropAllMemo || 'イベントエアドロップ',
+                    }) as { count: number }
+                    toast.success(`${d.count}名にエアドロップ配布完了`)
+                    setAirdropAllAmount('')
+                    setAirdropAllMemo('')
+                  })}
+                  disabled={loading || !airdropAllAmount}
+                  className="min-h-10"
+                >
+                  配布
+                </Button>
+              </div>
+              <Input
+                placeholder="メモ（任意）"
+                value={airdropAllMemo}
+                onChange={e => setAirdropAllMemo(e.target.value)}
+                className="min-h-10"
+              />
+            </div>
+
+            {/* ポイント全員付与 */}
+            <div className="flex flex-col gap-2">
+              <p className="text-xs font-medium text-muted-foreground flex items-center gap-1">
+                <Star className="size-3" /> ポイント全員付与
+              </p>
+              <div className="flex gap-2">
+                <Input
+                  type="number"
+                  placeholder="付与ポイント"
+                  value={pointsAllAmount}
+                  onChange={e => setPointsAllAmount(e.target.value)}
+                  className="min-h-10 flex-1"
+                />
+                <Button
+                  variant="outline"
+                  onClick={() => withLoading(async () => {
+                    const d = await api('/admin/grant-points-all', 'POST', {
+                      amount: Number(pointsAllAmount),
+                      reason: pointsAllReason || 'イベントポイント付与',
+                    }) as { count: number }
+                    toast.success(`${d.count}名にポイント付与完了`)
+                    setPointsAllAmount('')
+                    setPointsAllReason('')
+                  })}
+                  disabled={loading || !pointsAllAmount}
+                  className="min-h-10"
+                >
+                  付与
+                </Button>
+              </div>
+              <Input
+                placeholder="理由（任意）"
+                value={pointsAllReason}
+                onChange={e => setPointsAllReason(e.target.value)}
+                className="min-h-10"
+              />
+            </div>
+          </div>
+
+          {/* ═══ 選択ユーザー操作 ═══ */}
           {selected.size > 0 && (
-            <div className="rounded-lg border border-primary/30 bg-primary/5 p-4 flex flex-col gap-4">
-              <p className="text-sm font-semibold text-primary flex items-center gap-2">
-                <CheckSquare className="size-4" />
+            <div className="rounded-lg border border-border bg-card p-4 flex flex-col gap-4">
+              <p className="text-sm font-semibold flex items-center gap-2">
+                <CheckSquare className="size-4 text-primary" />
                 {selected.size}名選択中
               </p>
 
@@ -240,30 +363,58 @@ export function AdminPanel({ users, onRefresh }: { users: UserRow[]; onRefresh: 
                   <Input
                     type="number"
                     placeholder="配布量"
-                    value={airdropAmount}
-                    onChange={e => setAirdropAmount(e.target.value)}
+                    value={bulkAmount}
+                    onChange={e => setBulkAmount(e.target.value)}
                     className="min-h-10 flex-1"
                   />
                   <Button
                     onClick={() => withLoading(() =>
                       api('/admin/distribute-airdrop', 'POST', {
                         targetUserIds: selectedIds,
-                        amount: Number(airdropAmount),
-                        memo: airdropMemo || 'INMU配布',
+                        amount: Number(bulkAmount),
+                        memo: bulkReason || 'INMU配布',
                       })
                     )}
-                    disabled={loading || !airdropAmount}
+                    disabled={loading || !bulkAmount}
                     className="min-h-10"
                   >
                     配布
                   </Button>
                 </div>
-                <Input
-                  placeholder="メモ"
-                  value={airdropMemo}
-                  onChange={e => setAirdropMemo(e.target.value)}
-                  className="min-h-10"
-                />
+              </div>
+
+              {/* INMU減算 */}
+              <div className="flex flex-col gap-2">
+                <p className="text-xs font-medium text-muted-foreground flex items-center gap-1">
+                  <MinusCircle className="size-3 text-destructive" /> INMU減算（選択ユーザー）
+                </p>
+                <div className="flex gap-2">
+                  <Input
+                    type="number"
+                    placeholder="減算量"
+                    value={bulkDeductAmount}
+                    onChange={e => setBulkDeductAmount(e.target.value)}
+                    className="min-h-10 flex-1"
+                  />
+                  <Button
+                    variant="destructive"
+                    onClick={() => withLoading(async () => {
+                      for (const uid of selectedIds) {
+                        await api('/admin/deduct-balance', 'POST', {
+                          targetUserId: uid,
+                          amount: Number(bulkDeductAmount),
+                          reason: bulkReason || '管理者による減算',
+                        })
+                      }
+                      toast.success(`${selectedIds.length}名から減算完了`)
+                      setBulkDeductAmount('')
+                    })}
+                    disabled={loading || !bulkDeductAmount}
+                    className="min-h-10"
+                  >
+                    減算
+                  </Button>
+                </div>
               </div>
 
               {/* ポイント付与 */}
@@ -332,7 +483,7 @@ export function AdminPanel({ users, onRefresh }: { users: UserRow[]; onRefresh: 
               </div>
 
               <Input
-                placeholder="理由（共通）"
+                placeholder="理由・メモ（共通）"
                 value={bulkReason}
                 onChange={e => setBulkReason(e.target.value)}
                 className="min-h-10"
@@ -340,9 +491,9 @@ export function AdminPanel({ users, onRefresh }: { users: UserRow[]; onRefresh: 
             </div>
           )}
 
-          {/* Single user actions */}
+          {/* ═══ 個別ユーザー操作 ═══ */}
           {focusUser ? (
-            <div className="flex flex-col gap-4">
+            <div className="flex flex-col gap-4 border-t border-border pt-4">
               <div className="rounded-lg bg-secondary/50 px-3 py-2">
                 <p className="text-sm font-medium">{focusUser.displayName}</p>
                 <p className="text-xs text-muted-foreground">残高: {formatInmu(focusUser.balance)}</p>
@@ -388,8 +539,8 @@ export function AdminPanel({ users, onRefresh }: { users: UserRow[]; onRefresh: 
                   <Input
                     type="number"
                     placeholder="減算量"
-                    value={bulkAmount}
-                    onChange={e => setBulkAmount(e.target.value)}
+                    value={amount}
+                    onChange={e => setAmount(e.target.value)}
                     className="min-h-11 flex-1"
                   />
                   <Button
@@ -397,11 +548,11 @@ export function AdminPanel({ users, onRefresh }: { users: UserRow[]; onRefresh: 
                     onClick={() => withLoading(() =>
                       api('/admin/deduct-balance', 'POST', {
                         targetUserId: focusUser.userId,
-                        amount: Number(bulkAmount),
+                        amount: Number(amount),
                         reason,
                       })
                     )}
-                    disabled={loading || !bulkAmount}
+                    disabled={loading || !amount}
                     className="min-h-11"
                   >
                     減算
@@ -451,79 +602,12 @@ export function AdminPanel({ users, onRefresh }: { users: UserRow[]; onRefresh: 
                   {t('register_tx')}
                 </Button>
               </div>
-
-              {/* 報酬配布 */}
-              <div className="flex flex-col gap-2">
-                <p className="text-xs font-medium text-muted-foreground">{t('distribute_reward')}</p>
-                <select
-                  value={rewardType}
-                  onChange={e => setRewardType(e.target.value)}
-                  className="h-11 rounded-md border border-input bg-background px-3 text-sm"
-                >
-                  <option value="810day">810Day</option>
-                  <option value="inmuday">INMU Day</option>
-                  <option value="campaign">Campaign</option>
-                </select>
-                <Input
-                  type="number"
-                  placeholder="Amount"
-                  value={amount}
-                  onChange={e => setAmount(e.target.value)}
-                  className="min-h-11"
-                />
-                <Button
-                  variant="outline"
-                  onClick={() => withLoading(() =>
-                    api('/admin/distribute-reward', 'POST', {
-                      targetUserId: focusUser.userId,
-                      rewardType,
-                      amount: Number(amount),
-                      memo: reason,
-                    })
-                  )}
-                  disabled={loading}
-                  className="min-h-11"
-                >
-                  {t('distribute_reward')}
-                </Button>
-              </div>
             </div>
           ) : (
-            <p className="py-8 text-center text-sm text-muted-foreground">
-              Usersタブでユーザーをクリックして選択してください
+            <p className="py-6 text-center text-sm text-muted-foreground border-t border-border pt-4">
+              Usersタブでユーザーをクリックして選択
             </p>
           )}
-
-          {/* 全員エアドロップ */}
-          <div className="flex flex-col gap-2 border-t border-border pt-4">
-            <p className="text-xs font-medium text-muted-foreground">{t('distribute_airdrop')}（全員）</p>
-            <Input
-              type="number"
-              placeholder="配布量/人"
-              value={airdropAmount}
-              onChange={e => setAirdropAmount(e.target.value)}
-              className="min-h-11"
-            />
-            <Input
-              placeholder="Memo"
-              value={airdropMemo}
-              onChange={e => setAirdropMemo(e.target.value)}
-              className="min-h-11"
-            />
-            <Button
-              onClick={() => withLoading(() =>
-                api('/admin/distribute-airdrop', 'POST', {
-                  targetUserIds: users.map(u => u.userId),
-                  amount: Number(airdropAmount),
-                  memo: airdropMemo,
-                })
-              )}
-              disabled={loading || !airdropAmount}
-              className="min-h-11"
-            >
-              {t('distribute_airdrop')}
-            </Button>
-          </div>
 
           {/* CSV出力 */}
           <Button
@@ -535,6 +619,61 @@ export function AdminPanel({ users, onRefresh }: { users: UserRow[]; onRefresh: 
             <Download className="size-4" />
             {t('backup')} (CSV)
           </Button>
+        </TabsContent>
+
+        {/* ── Wallet tab ── */}
+        <TabsContent value="wallet" className="flex flex-col gap-4 mt-3">
+          <div className="flex items-center gap-2">
+            <WalletCards className="size-4 text-primary" />
+            <p className="text-sm font-semibold">管理ウォレット接続</p>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            管理者専用の Phantom ウォレットを接続します。一般ユーザーには表示されません。
+          </p>
+
+          {adminWallet ? (
+            <div className="flex flex-col gap-3">
+              <Card className="border-primary/30 bg-primary/5 p-4">
+                <div className="flex items-center gap-2 mb-1">
+                  <Wallet className="size-4 text-primary" />
+                  <p className="text-xs font-medium text-primary">接続中</p>
+                </div>
+                <p className="font-mono text-xs break-all text-foreground">{adminWallet}</p>
+                <a
+                  href={`https://solscan.io/account/${adminWallet}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="mt-2 flex items-center gap-1 text-xs text-muted-foreground hover:text-primary"
+                >
+                  <ExternalLink className="size-3" />
+                  Solscan で確認
+                </a>
+              </Card>
+              <Button
+                variant="outline"
+                onClick={disconnectAdminWallet}
+                disabled={adminWalletLoading}
+                className="min-h-11 gap-2"
+              >
+                <Wallet className="size-4" />
+                {adminWalletLoading ? '処理中…' : 'ウォレットを切断'}
+              </Button>
+            </div>
+          ) : (
+            <div className="flex flex-col gap-3">
+              <Card className="border-border bg-card p-4 text-center text-sm text-muted-foreground">
+                未接続
+              </Card>
+              <Button
+                onClick={connectAdminWallet}
+                disabled={adminWalletLoading}
+                className="min-h-11 gap-2"
+              >
+                <Wallet className="size-4" />
+                {adminWalletLoading ? '接続中…' : 'Phantom を接続'}
+              </Button>
+            </div>
+          )}
         </TabsContent>
 
         {/* ── Audit tab ── */}
